@@ -1,0 +1,55 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "nordpool_sensor_id": "Namn på Nordpool-sensorn"
+        },
+        "description": "Fyll i Nordpool-sensorn. Se dokumentationen om något är oklart."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "iso_formatted_time": {
+        "name": "ISO-formaterad tid"
+      },
+      "electricity_price": {
+        "name": "Pris nu"
+      },
+      "electricity_level": {
+        "name": "Nivå nu"
+      }
+    }
+  },
+  "options": {
+    "error": {
+    },
+    "step": {
+      "init": {
+        "data": {
+          "nordpool_sensor_id": "Namn på Nordpool-sensorn",
+          "level_low": "Nedre gräns. Under denna nivå anses priset lågt.",
+          "level_high": "Övre gräns. Över denna nivå anses priset högt.",
+          "supplier_balancing_fee": "Elhandel Balansavgift",
+          "supplier_environment_fee": "Elhandel Bra Miljöval",
+          "supplier_certificate_fee": "Elhandel Certifikatskostnad",
+          "supplier_fixed_fee": "Elhandel Påslag",
+          "supplier_credit": "Elhandel Intäkt",
+          "grid_fixed_fee": "Elnät Fast avgift",
+          "grid_variable_fee": "Elnät Rörlig avgift",
+          "grid_energy_tax": "Elnät Energiskatt",
+          "electricity_vat": "Elmoms",
+          "grid_fixed_credit": "Elnät Nätnytta fast",
+          "grid_variable_credit": "Elnät Nätnytta rörlig"
+        },
+        "description": "Dessa värden tillåter justering av priserna för import och export av el. Se dokumentationen om något fält är oklart."
+      }
+    }
+  },
+  "device_info": {
+    "device_name": "Elprisnivåer",
+    "manufacturer": "Electricity Price Levels",
+    "model": "Electricity Price Levels"
+  }
+}

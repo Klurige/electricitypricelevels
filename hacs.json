@@ -1,0 +1,6 @@
+{
+    "name": "ElectricityPriceLevels",
+    "render_readme": true,
+    "content_in_root": false,
+    "domains": ["electricitypricelevels"]
+  }
