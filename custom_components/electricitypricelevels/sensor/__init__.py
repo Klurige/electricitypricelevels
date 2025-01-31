@@ -36,9 +36,10 @@ async def async_setup_entry(
         configuration_url="https://forecast.solar",
     )
 
+    level_sensor = ElectricityPriceLevelSensor(hass, entry, device_info)
     entities = [
-        ElectricityPriceLevelSensor(hass, entry, device_info),
-        TimeSensor(hass, entry, device_info)
+        level_sensor,
+        TimeSensor(hass, entry, device_info, level_sensor)
     ]
     async_add_entities(entities)
 

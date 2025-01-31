@@ -155,38 +155,32 @@ class ElectricityPriceLevelSensor(SensorEntity):
                 raw_ranked = incoming_attributes["raw_today"].copy()
                 raw_ranked.sort(key=lambda x: x["value"])
                 for entry in incoming_attributes["raw_today"]:
-                    start = entry["start"]
-                    value = entry["value"]
-                    cost, credit = self.calculate_cost_and_credit(value)
-                    level = self.calculate_level(cost)
-                    try:
-                        rank = next(i for i, ranked_entry in enumerate(raw_ranked) if ranked_entry["start"] == start)
-                        self._rates.append(
-                            {"start": start, "cost": cost, "credit": credit, "level": level, "rank": rank})
-                    except StopIteration:
-                        self._rates.append(
-                            {"start": start, "cost": cost, "credit": credit, "level": level})
+                    self._process_entry(entry, raw_ranked)
 
             if "raw_tomorrow" in incoming_attributes:
                 raw_ranked = incoming_attributes["raw_tomorrow"].copy()
                 raw_ranked.sort(key=lambda x: x["value"])
                 for entry in incoming_attributes["raw_tomorrow"]:
-                    start = entry["start"]
-                    value = entry["value"]
-                    cost, credit = self.calculate_cost_and_credit(value)
-                    level = self.calculate_level(cost)
-                    try:
-                        rank = next(i for i, ranked_entry in enumerate(raw_ranked) if ranked_entry["start"] == start)
-                        self._rates.append(
-                            {"start": start, "cost": cost, "credit": credit, "level": level, "rank": rank})
-                    except StopIteration:
-                        self._rates.append(
-                            {"start": start, "cost": cost, "credit": credit, "level": level})
+                    self._process_entry(entry, raw_ranked)
 
         except ValueError:
             _LOGGER.error("Invalid nordpool value: %s", incoming_value)
         _LOGGER.debug("Got rates %s", len(self._rates))
         self.async_write_ha_state()
+
+    def _process_entry(self, entry, raw_ranked):
+        start = entry["start"]
+        end = entry["end"]
+        value = entry["value"]
+        cost, credit = self.calculate_cost_and_credit(value)
+        level = self.calculate_level(cost)
+        try:
+            rank = next(i for i, ranked_entry in enumerate(raw_ranked) if ranked_entry["start"] == start)
+            self._rates.append(
+                {"start": start, "end": end, "cost": cost, "credit": credit, "level": level, "rank": rank})
+        except StopIteration:
+            self._rates.append(
+                {"start": start, "end": end, "cost": cost, "credit": credit, "level": level})
 
     def calculate_cost_and_credit(self, nordpool_value):
         # Convert all input values to float
