@@ -1,16 +1,20 @@
 # Electricity Price Levels for Home Assistant
 [!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/klurige)
 
-This integration provides the electricity price levels from the Nord Pool electricity market.
+This integration provides electricity price levels, stemming from the Nord Pool electricity market.
 
-The electricity price you actually pay is the sum of the electricity price and various fees and taxes. The electricity price is the price of the electricity itself, while the fees and taxes are added on top of the electricity price. The electricity price is determined by the market, while the fees and taxes are determined by the supplier and the grid company.
+The electricity price you actually pay is the sum of the electricity price and various fees and taxes. 
+The electricity price is the price of the electricity itself, while the fees and taxes are added on top.
 
-This integration allows for adding all theses fees and taxes to the price and provides the total price you pay for electricity.
+This integration allows for adding all these fees and taxes to the price and provides the total price
+you pay for electricity.
 It also allows for setting a high and low price level, which can be used for automation in Home Assistant.
 
 Nord Pool is a service provider that operates an electricity market and power system services, including the exchange of electricity on a spot market Nordics and Baltic countries.
 
-This integration assumes that you have the Nordpool integration sensor in Home Assistant. Note that the built-in Nordpool integration can currently not be used, as it does not provide the necessary data for this integration. The Nordpool integration sensor can be found [here](
+This integration assumes that you have the Nordpool integration sensor in Home Assistant.
+Note that the built-in Nordpool integration can currently not be used, as it does not provide the
+necessary data for this integration. The Nordpool integration sensor can be found [here](
 
 
 [ApexCharts](https://github.com/RomRider/apexcharts-card) card is recommended for visualization of the data in Home Assistant.<br>
@@ -46,7 +50,11 @@ This integration assumes that you have the Nordpool integration sensor in Home A
 Coming soon
 
 ## Configuration
-There are many extra fees and taxes that can be added to the price. These can be added in the configuration of the integration. The configuration can be found in the integration settings.
+There are many extra fees and taxes that can be added to the price. These can be added in the
+configuration of the integration. The configuration can be found in the integration settings.
+
+I have added to the configuration taxes and fees added by my grid and supplier. They are no doubt
+called differently for other grids and suppliers.
 
 | Key                      | Description                 |
 |--------------------------|-----------------------------|
@@ -66,10 +74,10 @@ There are many extra fees and taxes that can be added to the price. These can be
 
 ## Sensors
 
-| Entity ID                | Description                     |
-|--------------------------|---------------------------------|
-| `sensor.iso_formatted_time` | Time in ISO format             |
-| `sensor.period_counter`  | Counts time periods in Nordpool data |
+| Entity ID                   | Description            |
+|-----------------------------|------------------------|
+| `sensor.iso_formatted_time` | Time in ISO format.    |
+| `sensor.electricity_price`  | Price for electricity. |
 
 ## Troubleshooting
 
