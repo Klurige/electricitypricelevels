@@ -79,13 +79,59 @@ called differently for other grids and suppliers.
 | `sensor.iso_formatted_time` | Time in ISO format.    |
 | `sensor.electricity_price`  | Price for electricity. |
 
+## Visualisation
+The data can be visualized using the ApexCharts card.
+Here is an example of how the data can be visualized in Home Assistant.
+Also needed is the ´config-template-card´.
+
+```yaml
+type: custom:config-template-card
+variables:
+  thresholdLow: states["sensor.electricity_price"].attributes.low_threshold
+  thresholdHigh: states["sensor.electricity_price"].attributes.high_threshold
+entities:
+  - sensor.electricity_price
+card:
+  type: custom:apexcharts-card
+  graph_span: 48h
+  span:
+    start: day
+  experimental:
+    color_threshold: true
+  series:
+    - entity: sensor.electricity_price
+      name: Köp
+      type: column
+      color: green
+      float_precision: 2
+      extend_to: end
+      data_generator: |
+        return entity.attributes.rates.map((rate, index) => {
+          return [new Date(rate["start"]).getTime(), rate["cost"]];
+        });
+      color_threshold:
+        - value: -1000000
+          color: green
+        - value: ${vars.thresholdLow}
+          color: yellow
+        - value: ${vars.thresholdHigh}
+          color: red
+```
 ## Troubleshooting
+  "mounts": [
+  "source=/home/cid13773/projects/ha/ha_dev/levelindicatorclock/dist,target=/workspaces/home-assistant-core/config/www/levelindicatorclock,type=bind,consistency=cached",
+  "source=/home/cid13773/projects/ha/ha_dev/electricitypricelevels/custom_components/electricitypricelevels,target=/workspaces/home-assistant-core/config/custom_components/electricitypricelevels,type=bind,consistency=cached"
+],
 
 ### Debug logging
 Add this to your `configuration.yaml` and restart Home Assistant to debug the component.
 
 ```yaml
 logger:
+  default: info
   logs:
-    electricitypricelevels: debug
+    custom_components.electricitypricelevels.sensor.electricity_price_level_sensor: info
+    custom_components.electricitypricelevels.sensor.time_sensor: info
+    custom_components.electricitypricelevels.util: debug
+
 ```
