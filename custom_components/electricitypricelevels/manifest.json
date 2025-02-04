@@ -1,11 +1,12 @@
 {
   "domain": "electricitypricelevels",
   "codeowners": ["@Klurige"],
+  "issue_tracker": "",
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/Klurige/electricitypricelevels",
   "name": "Electricity Price Levels",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "iot_class": "calculated",
   "requirements": ["nordpool>=0.0.17"]
 }
