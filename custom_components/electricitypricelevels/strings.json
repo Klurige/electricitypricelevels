@@ -44,27 +44,25 @@
     }
   },
   "options": {
-    "error": {
-      "invalid_api_key": "[%key:common::config_flow::error::invalid_api_key%]"
-    },
     "step": {
       "init": {
         "description": "These values allow adjusting the presented prices for importing and exporting electricity. Please refer to the documentation if a field is unclear.",
         "data": {
           "nordpool_sensor_id": "[%key:component::electricitypricelevels::config::step::nordpool_sensor_id::data::nordpool_sensor_id%]",
-          "level_low": "Low threshold. Below this level, the price is considered low.",
-          "level_high": "High threshold. Above this level, the price is considered high.",
-          "supplier_balancing_fee": "Supplier balancing fee",
-          "supplier_environment_fee": "Supplier environment fee",
-          "supplier_certificate_fee": "Supplier certificate fee",
-          "supplier_fixed_fee": "Supplier fixed fee",
-          "supplier_credit": "Supplier credit",
-          "grid_fixed_fee": "Grid fixed fee",
-          "grid_variable_fee": "Grid variable fee",
-          "grid_energy_tax": "Grid energy tax",
-          "electricity_vat": "Electricity VAT",
-          "grid_fixed_credit": "Grid fixed credit",
-          "grid_variable_credit": "Grid variable credit"
+          "low_threshold": "[%key:component::electricitypricelevels::config::step::thresholds::data::low_threshold%]",
+          "high_threshold": "[%key:component::electricitypricelevels::config::step::thresholds::data::high_threshold%]",
+          "supplier_note": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_note%]",
+          "supplier_fixed_fee": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_fixed_fee%]",
+          "supplier_variable_fee": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_variable_fee%]",
+          "supplier_fixed_credit": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_fixed_credit%]",
+          "supplier_variable_credit": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_variable_credit%]",
+          "grid_note": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_note%]",
+          "grid_fixed_fee": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_fixed_fee%]",
+          "grid_variable_fee": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_variable_fee%]",
+          "grid_fixed_credit": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_fixed_credit%]",
+          "grid_variable_credit": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_variable_credit%]",
+          "grid_energy_tax": "[%key:component::electricitypricelevels::config::step::taxes_and_vat::data::grid_energy_tax%]",
+          "electricity_vat": "[%key:component::electricitypricelevels::config::step::taxes_and_vat::data::electricity_vat%]"
         }
       }
     }
