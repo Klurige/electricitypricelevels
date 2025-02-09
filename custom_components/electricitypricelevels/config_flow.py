@@ -156,14 +156,14 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
         errors = {}
         unit_of_measurement = self.data.get("unit_of_measurement", "")
         if user_input is not None:
-            level_low = user_input.get(CONF_LOW_THRESHOLD)
-            level_high = user_input.get(CONF_HIGH_THRESHOLD)
+            low_threshold = user_input.get(CONF_LOW_THRESHOLD)
+            high_threshold = user_input.get(CONF_HIGH_THRESHOLD)
 
-            if level_low is not None and level_high is not None and level_low > level_high:
-                errors["base"] = "level_low_higher_than_level_high"
+            if low_threshold is not None and high_threshold is not None and low_threshold > high_threshold:
+                errors["base"] = "low_threshold_higher_than_high_threshold"
             else:
-                self.data[CONF_LOW_THRESHOLD] = level_low
-                self.data[CONF_HIGH_THRESHOLD] = level_high
+                self.data[CONF_LOW_THRESHOLD] = low_threshold
+                self.data[CONF_HIGH_THRESHOLD] = high_threshold
                 return self.async_create_entry(
                     title="ElectricityPriceLevel",
                     data=self.data,
@@ -197,204 +197,122 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
 
 
 class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
-    """Handle options."""
-
     async def async_step_init(
             self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the options."""
         errors = {}
         unit_of_measurement = ""
-        currency = ""
-        _price_divisor = 1
         nordpool_sensor_id = self.config_entry.options.get(CONF_NORDPOOL_SENSOR_ID, "")
         if nordpool_sensor_id:
             state = self.hass.states.get(nordpool_sensor_id)
             if state:
                 unit_of_measurement = state.attributes.get("unit_of_measurement", "")
-                currency = state.attributes.get("currency", "")
-                prices_in_cents = state.attributes.get("prices_in_cents", False)
-                if prices_in_cents:
-                    _LOGGER.debug("Prices in cents")
-                    _price_divisor = 1
-                else:
-                    _LOGGER.debug("Prices in euros")
-                    _price_divisor = 100
 
         if user_input is not None:
-            return self.async_create_entry(title="ElectricityPriceLevel", data=user_input)
+            low_threshold = user_input.get(CONF_LOW_THRESHOLD)
+            high_threshold = user_input.get(CONF_HIGH_THRESHOLD)
+
+            if low_threshold is not None and high_threshold is not None and low_threshold > high_threshold:
+                errors["base"] = "low_threshold_higher_than_high_threshold"
+            else:
+                return self.async_create_entry(title="ElectricityPriceLevel", data=user_input)
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_NORDPOOL_SENSOR_ID,
-                                 default=self.config_entry.options.get(CONF_NORDPOOL_SENSOR_ID, "")): selector(
-                        {"entity": {"domain": "sensor"}}),
+                                 default=self.config_entry.options.get(CONF_NORDPOOL_SENSOR_ID, "")): selector({"entity": {"domain": "sensor"}}),
+
                     vol.Optional(
                         CONF_LOW_THRESHOLD,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_LOW_THRESHOLD, None
-                            ),
+                            "suggested_value": self.config_entry.options.get(CONF_LOW_THRESHOLD, None),
                             "suffix": unit_of_measurement
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
                     vol.Optional(
                         CONF_HIGH_THRESHOLD,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_HIGH_THRESHOLD, None
-                            ),
+                            "suggested_value": self.config_entry.options.get(CONF_HIGH_THRESHOLD, None),
                             "suffix": unit_of_measurement
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
 
                     vol.Optional(
-                        CONF_SUPPLIER_FIXED_FEE_COMMENT,
+                        CONF_SUPPLIER_NOTE,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_SUPPLIER_FIXED_FEE_COMMENT, ""
-                            )
+                            "suggested_value": self.config_entry.options.get(CONF_SUPPLIER_NOTE, None)
                         },
                     ): vol.All(vol.Coerce(str)),
                     vol.Optional(
                         CONF_SUPPLIER_FIXED_FEE,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_SUPPLIER_FIXED_FEE, 0.0 / _price_divisor
-                            ),
+                            "suggested_value": self.config_entry.options.get(CONF_SUPPLIER_FIXED_FEE, None),
                             "suffix": unit_of_measurement
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
-                    vol.Optional(
-                        CONF_SUPPLIER_VARIABLE_FEE_COMMENT,
-                        description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_SUPPLIER_VARIABLE_FEE_COMMENT, ""
-                            )
-                        },
-                    ): vol.All(vol.Coerce(str)),
                     vol.Optional(
                         CONF_SUPPLIER_VARIABLE_FEE,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_SUPPLIER_VARIABLE_FEE, 0.0 / _price_divisor
-                            ),
+                            "suggested_value": self.config_entry.options.get(CONF_SUPPLIER_VARIABLE_FEE, None),
                             "suffix": "%"
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
-
                     vol.Optional(
-                        CONF_SUPPLIER_USAGE_CREDIT_COMMENT,
+                        CONF_SUPPLIER_FIXED_CREDIT,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_SUPPLIER_USAGE_CREDIT_COMMENT, ""
-                            )
-                        },
-                    ): vol.All(vol.Coerce(str)),
-                    vol.Optional(
-                        CONF_SUPPLIER_USAGE_CREDIT,
-                        description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_SUPPLIER_USAGE_CREDIT, 0.0 / _price_divisor
-                            ),
+                            "suggested_value": self.config_entry.options.get(CONF_SUPPLIER_FIXED_CREDIT, None),
                             "suffix": unit_of_measurement
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
                     vol.Optional(
-                        CONF_SUPPLIER_SPOTPRICE_CREDIT_COMMENT,
+                        CONF_SUPPLIER_VARIABLE_CREDIT,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_SUPPLIER_SPOTPRICE_CREDIT_COMMENT, ""
-                            )
-                        },
-                    ): vol.All(vol.Coerce(str)),
-                    vol.Optional(
-                        CONF_SUPPLIER_SPOTPRICE_CREDIT,
-                        description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_SUPPLIER_SPOTPRICE_CREDIT, 0.0 / _price_divisor
-                            ),
+                            "suggested_value": self.config_entry.options.get(CONF_SUPPLIER_VARIABLE_CREDIT, None),
                             "suffix": "%"
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
 
                     vol.Optional(
-                        CONF_GRID_FIXED_FEE_COMMENT,
+                        CONF_GRID_NOTE,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_GRID_FIXED_FEE_COMMENT, ""
-                            )
+                            "suggested_value": self.config_entry.options.get(CONF_GRID_NOTE, None)
                         },
                     ): vol.All(vol.Coerce(str)),
                     vol.Optional(
                         CONF_GRID_FIXED_FEE,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_GRID_FIXED_FEE, 0.0 / _price_divisor
-                            ),
+                            "suggested_value": self.config_entry.options.get(CONF_GRID_FIXED_FEE, None),
                             "suffix": unit_of_measurement
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
-                    vol.Optional(
-                        CONF_GRID_VARIABLE_FEE_COMMENT,
-                        description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_GRID_VARIABLE_FEE_COMMENT, ""
-                            )
-                        },
-                    ): vol.All(vol.Coerce(str)),
                     vol.Optional(
                         CONF_GRID_VARIABLE_FEE,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_GRID_VARIABLE_FEE, 0.0 / _price_divisor
-                            ),
-                            "suffix": unit_of_measurement
+                            "suggested_value": self.config_entry.options.get(CONF_GRID_VARIABLE_FEE, None),
+                            "suffix": "%"
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
-
                     vol.Optional(
-                        CONF_GRID_USAGE_CREDIT_COMMENT,
+                        CONF_GRID_FIXED_CREDIT,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_GRID_USAGE_CREDIT_COMMENT, ""
-                            )
-                        },
-                    ): vol.All(vol.Coerce(str)),
-                    vol.Optional(
-                        CONF_GRID_USAGE_CREDIT,
-                        description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_GRID_USAGE_CREDIT, 0.0 / _price_divisor
-                            ),
+                            "suggested_value": self.config_entry.options.get(CONF_GRID_FIXED_CREDIT, None),
                             "suffix": unit_of_measurement
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
                     vol.Optional(
-                        CONF_GRID_SPOTPRICE_CREDIT_COMMENT,
+                        CONF_GRID_VARIABLE_CREDIT,
                         description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_GRID_SPOTPRICE_CREDIT_COMMENT, ""
-                            )
-                        },
-                    ): vol.All(vol.Coerce(str)),
-                    vol.Optional(
-                        CONF_GRID_SPOTPRICE_CREDIT,
-                        description={
-                            "suggested_value": self.config_entry.options.get(
-                                CONF_GRID_SPOTPRICE_CREDIT, 0.0 / _price_divisor
-                            ),
-                            "suffix": unit_of_measurement
+                            "suggested_value": self.config_entry.options.get(CONF_GRID_VARIABLE_CREDIT, None),
+                            "suffix": "%"
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
 
                     vol.Optional(
                         CONF_GRID_ENERGY_TAX,
                         description={
-                            "suggested_value": self.config_entry.options.get(CONF_GRID_ENERGY_TAX,
-                                                                             43.90 / _price_divisor),
+                            "suggested_value": self.config_entry.options.get(CONF_GRID_ENERGY_TAX, None),
                             "suffix": unit_of_measurement
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
