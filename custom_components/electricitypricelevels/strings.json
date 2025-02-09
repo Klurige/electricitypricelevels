@@ -12,6 +12,24 @@
         "data": {
           "electricity_vat": "config.step.electricity_vat.data.electricity_vat"
         }
+      },
+      "thresholds": {
+        "description": "config.step.thresholds.description",
+        "data": {
+          "thresholds": "config.step.thresholds.data.thresholds"
+        }
+      },
+      "supplier_fixed_fee": {
+        "description": "config.step.supplier_fixed_fee.description",
+        "data": {
+          "supplier_fixed_fee": "config.step.supplier_fixed_fee.data.supplier_fixed_fee"
+        }
+      },
+      "supplier_variable_fee": {
+        "description": "config.step.supplier_variable_fee.description",
+        "data": {
+          "supplier_variable_fee": "config.step.supplier_variable_fee.data.supplier_variable_fee"
+        }
       }
     }
   },

@@ -12,6 +12,24 @@
         "data": {
           "electricity_vat": "VAT percentage"
         }
+      },
+      "thresholds": {
+        "description": "Thresholds for low and high prices.",
+        "data": {
+          "thresholds": "Thresholds"
+        }
+      },
+      "supplier_fixed_fee": {
+        "description": "Fee added to electricity price, per unit.",
+        "data": {
+          "supplier_fixed_fee": "Supplier fixed fee"
+        }
+      },
+      "supplier_variable_fee": {
+        "description": "Percentage added to the spotprice, by the supplier.",
+        "data": {
+          "supplier_variable_fee": "Supplier variable fee"
+        }
       }
     }
   },
@@ -37,17 +55,17 @@
           "nordpool_sensor_id": "Name of the Nordpool sensor",
           "level_low": "Low threshold. Below this level, the price is considered low.",
           "level_high": "High threshold. Above this level, the price is considered high.",
-          "supplier_balancing_fee": "Supplier balancing fee",
-          "supplier_environment_fee": "Supplier environment fee",
-          "supplier_certificate_fee": "Supplier certificate fee",
-          "supplier_fixed_fee": "Supplier fixed fee",
-          "supplier_credit": "Supplier credit",
-          "grid_fixed_fee": "Grid fixed fee",
-          "grid_variable_fee": "Grid variable fee",
-          "grid_energy_tax": "Grid energy tax",
-          "electricity_vat": "Electricity VAT",
-          "grid_fixed_credit": "Grid fixed credit",
-          "grid_variable_credit": "Grid variable credit"
+              "supplier_balancing_fee": "Supplier balancing fee",
+              "supplier_environment_fee": "Supplier environment fee",
+              "supplier_certificate_fee": "Supplier certificate fee",
+              "supplier_fixed_fee": "Supplier fixed fee",
+              "supplier_credit": "Supplier credit",
+              "grid_fixed_fee": "Grid fixed fee",
+              "grid_variable_fee": "Grid variable fee",
+              "grid_energy_tax": "Grid energy tax",
+              "electricity_vat": "Electricity VAT",
+              "grid_fixed_credit": "Grid fixed credit",
+              "grid_variable_credit": "Grid variable credit"
         },
         "description": "These values allow adjusting the presented prices for importing and exporting electricity. Please refer to the documentation if a field is unclear."
       }
