@@ -20,24 +20,18 @@ from homeassistant.core import callback
 
 from .const import (
     CONF_NORDPOOL_SENSOR_ID,
-    CONF_LEVEL_LOW,
-    CONF_LEVEL_HIGH,
-    CONF_SUPPLIER_FIXED_FEE_COMMENT,
+    CONF_LOW_THRESHOLD,
+    CONF_HIGH_THRESHOLD,
+    CONF_SUPPLIER_NOTE,
     CONF_SUPPLIER_FIXED_FEE,
-    CONF_SUPPLIER_VARIABLE_FEE_COMMENT,
     CONF_SUPPLIER_VARIABLE_FEE,
-    CONF_SUPPLIER_USAGE_CREDIT_COMMENT,
-    CONF_SUPPLIER_USAGE_CREDIT,
-    CONF_SUPPLIER_SPOTPRICE_CREDIT_COMMENT,
-    CONF_SUPPLIER_SPOTPRICE_CREDIT,
-    CONF_GRID_FIXED_FEE_COMMENT,
+    CONF_SUPPLIER_FIXED_CREDIT,
+    CONF_SUPPLIER_VARIABLE_CREDIT,
+    CONF_GRID_NOTE,
     CONF_GRID_FIXED_FEE,
-    CONF_GRID_VARIABLE_FEE_COMMENT,
     CONF_GRID_VARIABLE_FEE,
-    CONF_GRID_USAGE_CREDIT_COMMENT,
-    CONF_GRID_USAGE_CREDIT,
-    CONF_GRID_SPOTPRICE_CREDIT_COMMENT,
-    CONF_GRID_SPOTPRICE_CREDIT,
+    CONF_GRID_FIXED_CREDIT,
+    CONF_GRID_VARIABLE_CREDIT,
     CONF_GRID_ENERGY_TAX,
     CONF_ELECTRICITY_VAT,
     DOMAIN,
@@ -77,7 +71,7 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
                     "currency": currency,
                     "price_divisor": _price_divisor,
                 })
-            return await self.async_step_supplier_fixed_fee()
+            return await self.async_step_supplier_fees_and_credits()
 
         return self.async_show_form(
             step_id="user",
@@ -87,34 +81,70 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
             errors=errors
         )
 
-    async def async_step_supplier_fixed_fee(
+    async def async_step_supplier_fees_and_credits(
             self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors = {}
         unit_of_measurement = self.data.get("unit_of_measurement", "")
         if user_input is not None:
+            self.data[CONF_SUPPLIER_NOTE] = user_input.get(CONF_SUPPLIER_NOTE, None)
             self.data[CONF_SUPPLIER_FIXED_FEE] = user_input.get(CONF_SUPPLIER_FIXED_FEE, None)
-            return await self.async_step_electricity_vat()
+            self.data[CONF_SUPPLIER_VARIABLE_FEE] = user_input.get(CONF_SUPPLIER_VARIABLE_FEE, None)
+            self.data[CONF_SUPPLIER_FIXED_CREDIT] = user_input.get(CONF_SUPPLIER_FIXED_CREDIT, None)
+            self.data[CONF_SUPPLIER_VARIABLE_CREDIT] = user_input.get(CONF_SUPPLIER_VARIABLE_CREDIT, None)
+            return await self.async_step_grid_fees_and_credits()
 
         return self.async_show_form(
-            step_id="supplier_fixed_fee",
+            step_id="supplier_fees_and_credits",
             data_schema=vol.Schema({
+                vol.Optional(CONF_SUPPLIER_NOTE): vol.Coerce(str),
                 vol.Optional(CONF_SUPPLIER_FIXED_FEE, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
+                vol.Optional(CONF_SUPPLIER_VARIABLE_FEE, description={"suffix": "%"}): vol.All(vol.Coerce(float),cv.positive_float),
+                vol.Optional(CONF_SUPPLIER_FIXED_CREDIT, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float),cv.positive_float),
+                vol.Optional(CONF_SUPPLIER_VARIABLE_CREDIT, description={"suffix": "%"}): vol.All(vol.Coerce(float),cv.positive_float),
             }),
             errors=errors
         )
 
-    async def async_step_electricity_vat(
+    async def async_step_grid_fees_and_credits(
             self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors = {}
+        unit_of_measurement = self.data.get("unit_of_measurement", "")
         if user_input is not None:
+            self.data[CONF_GRID_NOTE] = user_input.get(CONF_GRID_NOTE, None)
+            self.data[CONF_GRID_FIXED_FEE] = user_input.get(CONF_GRID_FIXED_FEE, None)
+            self.data[CONF_GRID_VARIABLE_FEE] = user_input.get(CONF_GRID_VARIABLE_FEE, None)
+            self.data[CONF_GRID_FIXED_CREDIT] = user_input.get(CONF_GRID_FIXED_CREDIT, None)
+            self.data[CONF_GRID_VARIABLE_CREDIT] = user_input.get(CONF_GRID_VARIABLE_CREDIT, None)
+            return await self.async_step_taxes_and_vat()
+
+        return self.async_show_form(
+            step_id="grid_fees_and_credits",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_GRID_NOTE): vol.Coerce(str),
+                vol.Optional(CONF_GRID_FIXED_FEE, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
+                vol.Optional(CONF_GRID_VARIABLE_FEE, description={"suffix": "%"}): vol.All(vol.Coerce(float),cv.positive_float),
+                vol.Optional(CONF_GRID_FIXED_CREDIT, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float),cv.positive_float),
+                vol.Optional(CONF_GRID_VARIABLE_CREDIT, description={"suffix": "%"}): vol.All(vol.Coerce(float),cv.positive_float),
+            }),
+            errors=errors
+        )
+
+    async def async_step_taxes_and_vat(
+            self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors = {}
+        unit_of_measurement = self.data.get("unit_of_measurement", "")
+        if user_input is not None:
+            self.data[CONF_GRID_ENERGY_TAX] = user_input.get(CONF_GRID_ENERGY_TAX, None)
             self.data[CONF_ELECTRICITY_VAT] = user_input.get(CONF_ELECTRICITY_VAT, None)
             return await self.async_step_thresholds()
 
         return self.async_show_form(
-            step_id="electricity_vat",
+            step_id="taxes_and_vat",
             data_schema=vol.Schema({
+                vol.Optional(CONF_GRID_ENERGY_TAX, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
                 vol.Optional(CONF_ELECTRICITY_VAT, description={"suffix": "%"}): vol.All(vol.Coerce(float), cv.positive_float),
             }),
             errors=errors
@@ -126,31 +156,41 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
         errors = {}
         unit_of_measurement = self.data.get("unit_of_measurement", "")
         if user_input is not None:
-            level_low = user_input.get(CONF_LEVEL_LOW)
-            level_high = user_input.get(CONF_LEVEL_HIGH)
+            level_low = user_input.get(CONF_LOW_THRESHOLD)
+            level_high = user_input.get(CONF_HIGH_THRESHOLD)
 
             if level_low is not None and level_high is not None and level_low > level_high:
                 errors["base"] = "level_low_higher_than_level_high"
             else:
-                self.data[CONF_LEVEL_LOW] = level_low
-                self.data[CONF_LEVEL_HIGH] = level_high
+                self.data[CONF_LOW_THRESHOLD] = level_low
+                self.data[CONF_HIGH_THRESHOLD] = level_high
                 return self.async_create_entry(
                     title="ElectricityPriceLevel",
                     data=self.data,
                     options={
                         CONF_NORDPOOL_SENSOR_ID: self.data[CONF_NORDPOOL_SENSOR_ID],
+                        CONF_SUPPLIER_NOTE: self.data[CONF_SUPPLIER_NOTE],
                         CONF_SUPPLIER_FIXED_FEE: self.data[CONF_SUPPLIER_FIXED_FEE],
+                        CONF_SUPPLIER_VARIABLE_FEE: self.data[CONF_SUPPLIER_VARIABLE_FEE],
+                        CONF_SUPPLIER_FIXED_CREDIT: self.data[CONF_SUPPLIER_FIXED_CREDIT],
+                        CONF_SUPPLIER_VARIABLE_CREDIT: self.data[CONF_SUPPLIER_VARIABLE_CREDIT],
+                        CONF_GRID_NOTE: self.data[CONF_GRID_NOTE],
+                        CONF_GRID_FIXED_FEE: self.data[CONF_GRID_FIXED_FEE],
+                        CONF_GRID_VARIABLE_FEE: self.data[CONF_GRID_VARIABLE_FEE],
+                        CONF_GRID_FIXED_CREDIT: self.data[CONF_GRID_FIXED_CREDIT],
+                        CONF_GRID_VARIABLE_CREDIT: self.data[CONF_GRID_VARIABLE_CREDIT],
                         CONF_ELECTRICITY_VAT: self.data[CONF_ELECTRICITY_VAT],
-                        CONF_LEVEL_LOW: self.data.get(CONF_LEVEL_LOW),
-                        CONF_LEVEL_HIGH: self.data.get(CONF_LEVEL_HIGH),
+                        CONF_GRID_ENERGY_TAX: self.data[CONF_GRID_ENERGY_TAX],
+                        CONF_LOW_THRESHOLD: self.data.get(CONF_LOW_THRESHOLD),
+                        CONF_HIGH_THRESHOLD: self.data.get(CONF_HIGH_THRESHOLD),
                     },
                 )
 
         return self.async_show_form(
             step_id="thresholds",
             data_schema=vol.Schema({
-                vol.Optional(CONF_LEVEL_LOW, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
-                vol.Optional(CONF_LEVEL_HIGH, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
+                vol.Optional(CONF_LOW_THRESHOLD, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
+                vol.Optional(CONF_HIGH_THRESHOLD, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
             }),
             errors=errors
         )
@@ -192,19 +232,19 @@ class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
                                  default=self.config_entry.options.get(CONF_NORDPOOL_SENSOR_ID, "")): selector(
                         {"entity": {"domain": "sensor"}}),
                     vol.Optional(
-                        CONF_LEVEL_LOW,
+                        CONF_LOW_THRESHOLD,
                         description={
                             "suggested_value": self.config_entry.options.get(
-                                CONF_LEVEL_LOW, None
+                                CONF_LOW_THRESHOLD, None
                             ),
                             "suffix": unit_of_measurement
                         },
                     ): vol.All(vol.Coerce(float), cv.positive_float),
                     vol.Optional(
-                        CONF_LEVEL_HIGH,
+                        CONF_HIGH_THRESHOLD,
                         description={
                             "suggested_value": self.config_entry.options.get(
-                                CONF_LEVEL_HIGH, None
+                                CONF_HIGH_THRESHOLD, None
                             ),
                             "suffix": unit_of_measurement
                         },

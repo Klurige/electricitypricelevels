@@ -7,30 +7,40 @@
           "nordpool_sensor_id": "Name of the Nordpool sensor"
         }
       },
-      "electricity_vat": {
-        "description": "Enter the VAT percentage for electricity.",
-        "data": {
-          "electricity_vat": "VAT percentage"
-        }
-      },
-      "thresholds": {
-        "description": "Thresholds for low and high prices.",
-        "data": {
-          "thresholds": "Thresholds"
-        }
-      },
-      "supplier_fixed_fee": {
-        "description": "Fee added to electricity price, per unit.",
-        "data": {
-          "supplier_fixed_fee": "Supplier fixed fee"
-        }
-      },
-      "supplier_variable_fee": {
-        "description": "Percentage added to the spotprice, by the supplier.",
-        "data": {
-          "supplier_variable_fee": "Supplier variable fee"
-        }
-      }
+"supplier_fees_and_credits": {
+  "description": "Supplier fees and credits.",
+  "data": {
+    "supplier_note": "Notes on supplier fees and credits.",
+    "supplier_fixed_fee": "Supplier fee per unit",
+    "supplier_variable_fee": "Supplier fee in percentage",
+    "supplier_fixed_credit": "Supplier credit per unit",
+    "supplier_variable_credit": "Supplier credit in percentage"
+  }
+},
+"grid_fees_and_credits": {
+  "description": "Grid fees and credits.",
+  "data": {
+    "grid_note": "Notes on grid fees and credits.",
+    "grid_fixed_fee": "Grid fee per unit",
+    "grid_variable_fee": "Grid fee in percentage",
+    "grid_fixed_credit": "Grid credit per unit",
+    "grid_variable_credit": "Grid credit in percentage"
+  }
+},
+"taxes_and_vat": {
+  "description": "Energy taxes and VAT.",
+  "data": {
+    "grid_energy_tax": "Energy tax per unit",
+    "electricity_vat": "Electricity VAT in percentage"
+  }
+},
+"thresholds": {
+  "description": "Thresholds for when electricity is expensive and cheap.",
+  "data": {
+    "low_threshold": "Lower threshold.",
+    "high_threshold": "Upper threshold."
+  }
+}
     }
   },
   "entity": {

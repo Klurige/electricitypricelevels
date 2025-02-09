@@ -7,28 +7,38 @@
           "nordpool_sensor_id": "config.step.user.data.nordpool_sensor_id"
         }
       },
-      "electricity_vat": {
-        "description": "config.step.electricity_vat.description",
+      "supplier_fees_and_credits": {
+        "description": "config.step.supplier_fees_and_credits.description",
         "data": {
-          "electricity_vat": "config.step.electricity_vat.data.electricity_vat"
+          "supplier_note": "config.step.supplier_fees_and_credits.data.supplier_note",
+          "supplier_fixed_fee": "config.step.supplier_fees_and_credits.data.supplier_fixed_fee",
+          "supplier_variable_fee": "config.step.supplier_fees_and_credits.data.supplier_variable_fee",
+          "supplier_fixed_credit": "config.step.supplier_fees_and_credits.data.supplier_fixed_credit",
+          "supplier_variable_credit": "config.step.supplier_fees_and_credits.data.supplier_variable_credit",
+        }
+      },
+      "grid_fees_and_credits": {
+        "description": "config.step.grid_fees_and_credits.description",
+        "data": {
+          "grid_note": "config.step.grid_fees_and_credits.data.grid_note",
+          "grid_fixed_fee": "config.step.grid_fees_and_credits.data.grid_fixed_fee",
+          "grid_variable_fee": "config.step.grid_fees_and_credits.data.grid_variable_fee",
+          "grid_fixed_credit": "config.step.grid_fees_and_credits.data.grid_fixed_credit",
+          "grid_variable_credit": "config.step.grid_fees_and_credits.data.grid_variable_credit",
+        }
+      },
+      "taxes_and_vat": {
+        "description": "config.step.taxes_and_vat.description",
+        "data": {
+          "grid_energy_tax": "config.step.taxes_and_vat.data.grid_energy_tax",
+          "electricity_vat": "config.step.taxes_and_vat.data.electricity_vat"
         }
       },
       "thresholds": {
         "description": "config.step.thresholds.description",
         "data": {
-          "thresholds": "config.step.thresholds.data.thresholds"
-        }
-      },
-      "supplier_fixed_fee": {
-        "description": "config.step.supplier_fixed_fee.description",
-        "data": {
-          "supplier_fixed_fee": "config.step.supplier_fixed_fee.data.supplier_fixed_fee"
-        }
-      },
-      "supplier_variable_fee": {
-        "description": "config.step.supplier_variable_fee.description",
-        "data": {
-          "supplier_variable_fee": "config.step.supplier_variable_fee.data.supplier_variable_fee"
+          "low_threshold": "config.step.thresholds.data.low_threshold",
+          "high_threshold": "config.step.thresholds.data.high_threshold"
         }
       }
     }
