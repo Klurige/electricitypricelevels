@@ -2,15 +2,33 @@
   "config": {
     "step": {
       "user": {
-        "description": "Fill in the Nordpool sensor. Please refer to the documentation if unclear.",
+        "description": "Fyll i värden vid behov. Se dokumentationen för mer detaljer.",
         "data": {
-          "nordpool_sensor_id": "Name of the Nordpool sensor"
+          "nordpool_sensor_id": "Namn på nordpoolsensorn."
         }
       },
       "electricity_vat": {
-        "description": "Enter the VAT percentage for electricity.",
+        "description": "Elmoms i procent.",
         "data": {
-          "electricity_vat": "VAT percentage"
+          "electricity_vat": "Elmoms i procent"
+        }
+      },
+      "thresholds": {
+        "description": "Gränsvärden för när elen är dyr och billig.",
+        "data": {
+          "thresholds": "Gränsvärden"
+        }
+      },
+      "supplier_fixed_fee": {
+        "description": "Elhandelsavgift, per enhet.",
+        "data": {
+          "supplier_fixed_fee": "Elhandelsavgift"
+        }
+      },
+      "supplier_variable_fee": {
+        "description": "Elhandelsavgift i procent av spotpriset.",
+        "data": {
+          "supplier_variable_fee": "Elhandelsavgift"
         }
       }
     }
