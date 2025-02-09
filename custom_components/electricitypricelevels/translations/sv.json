@@ -7,28 +7,38 @@
           "nordpool_sensor_id": "Namn på nordpoolsensorn."
         }
       },
-      "electricity_vat": {
-        "description": "Elmoms i procent.",
+      "supplier_fees_and_credits": {
+        "description": "Elhandelsavgifter och intäkter.",
         "data": {
+          "supplier_note": "Noteringar om elhandelsavgifter och intäkter.",
+          "supplier_fixed_fee": "Elhandelsavgift per enhet",
+          "supplier_variable_fee": "Elhandelsavgift i procent",
+          "supplier_fixed_credit": "Elhandelsintäkt per enhet",
+          "supplier_variable_credit": "Elhandelsintäkt i procent"
+        }
+      },
+      "grid_fees_and_credits": {
+        "description": "Elnätsavgifter och intäkter.",
+        "data": {
+          "grid_note": "Noteringar om elnätsavgifter och intäkter.",
+          "grid_fixed_fee": "Elnätsavgift per enhet",
+          "grid_variable_fee": "Elnätsavgift i procent",
+          "grid_fixed_credit": "Elnätsintäkt per enhet",
+          "grid_variable_credit": "Elnätsintäkt i procent"
+        }
+      },
+      "taxes_and_vat": {
+        "description": "Energiskatter och moms.",
+        "data": {
+          "grid_energy_tax": "Energiskatt per enhet",
           "electricity_vat": "Elmoms i procent"
         }
       },
       "thresholds": {
         "description": "Gränsvärden för när elen är dyr och billig.",
         "data": {
-          "thresholds": "Gränsvärden"
-        }
-      },
-      "supplier_fixed_fee": {
-        "description": "Elhandelsavgift, per enhet.",
-        "data": {
-          "supplier_fixed_fee": "Elhandelsavgift"
-        }
-      },
-      "supplier_variable_fee": {
-        "description": "Elhandelsavgift i procent av spotpriset.",
-        "data": {
-          "supplier_variable_fee": "Elhandelsavgift"
+          "low_threshold": "Nedre gränsvärde.",
+          "high_threshold": "Övre gränsvärde."
         }
       }
     }
