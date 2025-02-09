@@ -2,10 +2,16 @@
   "config": {
     "step": {
       "user": {
+        "description": "Fill in the Nordpool sensor. Please refer to the documentation if unclear.",
         "data": {
           "nordpool_sensor_id": "Name of the Nordpool sensor"
-        },
-        "description": "Fill in the Nordpool sensor. Please refer to the documentation if unclear."
+        }
+      },
+      "electricity_vat": {
+        "description": "Enter the VAT percentage for electricity.",
+        "data": {
+          "electricity_vat": "VAT percentage"
+        }
       }
     }
   },

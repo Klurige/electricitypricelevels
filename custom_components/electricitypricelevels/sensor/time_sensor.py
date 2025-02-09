@@ -15,7 +15,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.helpers.event import async_track_time_change
 
-from .electricity_price_level_sensor_entity_description import ElectricityPriceLevelSensorEntityDescription
 from ..util import generate_level_pattern
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,11 +23,11 @@ _LOGGER = logging.getLogger(__name__)
 class TimeSensor(SensorEntity):
     """Representation of a Sensor."""
 
-    entity_description: ElectricityPriceLevelSensorEntityDescription
+    entity_description: SensorEntityDescription
     _attr_has_entity_name = True
 
     def __init__(self, hass, entry: ConfigEntry, device_info, level_sensor) -> None:
-        description = ElectricityPriceLevelSensorEntityDescription(
+        description = SensorEntityDescription(
         key="iso_formatted_time",
         translation_key="iso_formatted_time",
     )
