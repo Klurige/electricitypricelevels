@@ -10,6 +10,8 @@ def generate_level_pattern(rates):
     pattern = ""
     step_in_minutes = 12
     pattern_length_in_hours = 36
+    if rates is None or len(rates) == 0:
+        return "U" * (pattern_length_in_hours * 60 // step_in_minutes)
     start_time = rates[0]["start"]
     if isinstance(start_time, str):
         start_time = datetime.datetime.fromisoformat(start_time)

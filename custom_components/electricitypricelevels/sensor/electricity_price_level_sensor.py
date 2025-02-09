@@ -13,48 +13,46 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import EVENT_STATE_CHANGED
 
-from .electricity_price_level_sensor_entity_description import ElectricityPriceLevelSensorEntityDescription
 from ..const import (
     CONF_NORDPOOL_SENSOR_ID,
-    CONF_SUPPLIER_BALANCING_FEE,
-    CONF_SUPPLIER_ENVIRONMENT_FEE,
-    CONF_SUPPLIER_CERTIFICATE_FEE,
-    CONF_SUPPLIER_FIXED_FEE,
-    CONF_SUPPLIER_CREDIT,
-    CONF_GRID_FIXED_FEE,
-    CONF_GRID_VARIABLE_FEE,
-    CONF_GRID_ENERGY_TAX,
-    CONF_ELECTRICITY_VAT,
-    CONF_GRID_FIXED_CREDIT,
-    CONF_GRID_VARIABLE_CREDIT,
     CONF_LEVEL_LOW,
     CONF_LEVEL_HIGH,
+    CONF_SUPPLIER_FIXED_FEE,
+    CONF_SUPPLIER_VARIABLE_FEE,
+    CONF_SUPPLIER_USAGE_CREDIT,
+    CONF_SUPPLIER_SPOTPRICE_CREDIT,
+    CONF_GRID_FIXED_FEE,
+    CONF_GRID_VARIABLE_FEE,
+    CONF_GRID_USAGE_CREDIT,
+    CONF_GRID_SPOTPRICE_CREDIT,
+    CONF_GRID_ENERGY_TAX,
+    CONF_ELECTRICITY_VAT,
+    CONF_SUPPLIER_FIXED_FEE_COMMENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class ElectricityPriceLevelSensor(SensorEntity):
-    entity_description: ElectricityPriceLevelSensorEntityDescription
+    entity_description: SensorEntityDescription
     _attr_has_entity_name = True
 
     def __init__(self, hass, entry: ConfigEntry, device_info) -> None:
-        self._incoming_sensor_id = entry.options.get(CONF_NORDPOOL_SENSOR_ID, "")
-        self._supplier_balancing_fee = entry.options.get(CONF_SUPPLIER_BALANCING_FEE, 2.92)
-        self._supplier_environment_fee = entry.options.get(CONF_SUPPLIER_ENVIRONMENT_FEE, 3.00)
-        self._supplier_certificate_fee = entry.options.get(CONF_SUPPLIER_CERTIFICATE_FEE, 0.51)
-        self._supplier_fixed_fee = entry.options.get(CONF_SUPPLIER_FIXED_FEE, 3.63)
-        self._supplier_credit = entry.options.get(CONF_SUPPLIER_CREDIT, 2.00)
-        self._grid_fixed_fee = entry.options.get(CONF_GRID_FIXED_FEE, 7.33)
-        self._grid_variable_fee = entry.options.get(CONF_GRID_VARIABLE_FEE, 5.11)
-        self._grid_energy_tax = entry.options.get(CONF_GRID_ENERGY_TAX, 43.90)
-        self._electricity_vat = entry.options.get(CONF_ELECTRICITY_VAT, 25.00)
-        self._grid_fixed_credit = entry.options.get(CONF_GRID_FIXED_CREDIT, 4.53)
-        self._grid_variable_credit = entry.options.get(CONF_GRID_VARIABLE_CREDIT, 5.00)
-        self._level_low = entry.options.get(CONF_LEVEL_LOW, 200)
+        self._nordpool_sensor_id = entry.options.get(CONF_NORDPOOL_SENSOR_ID, "")
         self._level_high = entry.options.get(CONF_LEVEL_HIGH, 300)
+        self._level_low = entry.options.get(CONF_LEVEL_LOW, 200)
+        self._supplier_fixed_fee = entry.options.get(CONF_SUPPLIER_FIXED_FEE, 0.0)
+        self._supplier_variable_fee = entry.options.get(CONF_SUPPLIER_VARIABLE_FEE, 0.0)
+        self._supplier_usage_credit = entry.options.get(CONF_SUPPLIER_USAGE_CREDIT, 0.0)
+        self._supplier_spotprice_credit = entry.options.get(CONF_SUPPLIER_SPOTPRICE_CREDIT, 0.0)
+        self._grid_fixed_fee = entry.options.get(CONF_GRID_FIXED_FEE, 0.0)
+        self._grid_variable_fee = entry.options.get(CONF_GRID_VARIABLE_FEE, 0.0)
+        self._grid_usage_credit = entry.options.get(CONF_GRID_USAGE_CREDIT, 0.0)
+        self._grid_spotprice_credit = entry.options.get(CONF_GRID_SPOTPRICE_CREDIT, 0.0)
+        self._grid_energy_tax = entry.options.get(CONF_GRID_ENERGY_TAX, 0.0)
+        self._electricity_vat = entry.options.get(CONF_ELECTRICITY_VAT, 0.0)
 
-        description = ElectricityPriceLevelSensorEntityDescription(
+        description = SensorEntityDescription(
             key="electricity_price",
             translation_key="electricity_price",
         )
@@ -116,7 +114,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
         """Call when entity is added to hass."""
         if self._hass:
             self._hass.bus.async_listen(EVENT_STATE_CHANGED, self._handle_event)
-            initial_state = self._hass.states.get(self._incoming_sensor_id)
+            initial_state = self._hass.states.get(self._nordpool_sensor_id)
             if initial_state:
                 await self._process_incoming_value(initial_state.state, initial_state.attributes)
         else:
@@ -124,7 +122,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
     async def _handle_event(self, event):
         """Handle state changes of the other sensor."""
-        if event.data.get("entity_id") == self._incoming_sensor_id:
+        if event.data.get("entity_id") == self._nordpool_sensor_id:
             new_state = event.data.get("new_state")
             if new_state:
                 await self._process_incoming_value(new_state.state, new_state.attributes)
@@ -185,25 +183,23 @@ class ElectricityPriceLevelSensor(SensorEntity):
     def calculate_cost_and_credit(self, nordpool_value):
         # Convert all input values to float
         spot = float(nordpool_value)
-        grid_fixed = float(self._grid_fixed_fee) / self._price_divisor
-        grid_variable = float(self._grid_variable_fee) / 100
-        grid_tax = float(self._grid_energy_tax) / self._price_divisor
-        grid_vat = float(self._electricity_vat) / 100 + 1
-        supplier_fixed = float(self._supplier_fixed_fee) / self._price_divisor
-        supplier_certificate = float(self._supplier_certificate_fee) / self._price_divisor
-        supplier_environment = float(self._supplier_environment_fee) / self._price_divisor
-        supplier_balance = float(self._supplier_balancing_fee) / self._price_divisor
-        grid_fixed_credit = float(self._grid_fixed_credit) / self._price_divisor
-        grid_variable_credit = float(self._grid_variable_credit) / 100
-        supplier_credit = float(self._supplier_credit) / self._price_divisor
+        supplier_fixed_fee = float(self._supplier_fixed_fee) / self._price_divisor
+        supplier_variable_fee = float(self._supplier_variable_fee) / 100
+        supplier_usage_credit = float(self._supplier_usage_credit) / self._price_divisor
+        supplier_spotprice_credit = float(self._supplier_spotprice_credit) / 100
+        grid_fixed_fee = float(self._grid_fixed_fee) / self._price_divisor
+        grid_variable_fee = float(self._grid_variable_fee) / 100
+        grid_usage_credit = float(self._grid_usage_credit) / self._price_divisor
+        grid_spotprice_credit = float(self._grid_spotprice_credit) / 100
+        grid_energy_tax = float(self._grid_energy_tax) / self._price_divisor
+        electricity_vat = float(self._electricity_vat) / 100
 
         # Calculate cost
-        cost = (spot + (grid_fixed + spot * grid_variable + grid_tax) + (
-                supplier_fixed + supplier_certificate + supplier_environment + supplier_balance)) * grid_vat
+        cost = (supplier_fixed_fee + grid_fixed_fee + spot * (1 + supplier_variable_fee + grid_variable_fee) + grid_energy_tax) * (1 + electricity_vat)
         cost = round(cost, 5)
 
         # Calculate credit
-        credit = (grid_fixed_credit + spot * grid_variable_credit + spot - supplier_credit)
+        credit = (supplier_usage_credit + grid_usage_credit + spot * (1 + supplier_spotprice_credit + grid_spotprice_credit))
         credit = round(credit, 5)
 
         return cost, credit

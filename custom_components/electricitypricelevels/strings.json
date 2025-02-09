@@ -2,10 +2,15 @@
   "config": {
     "step": {
       "user": {
-        "description": "Fill in the Nordpool sensor. Please refer to the documentation if unclear.",
+        "description": "config.step.user.description",
         "data": {
-          "nordpool_sensor_id": "Name of the Nordpool sensor",
-          "name": "[%key:common::config_flow::data::name%]"
+          "nordpool_sensor_id": "config.step.user.data.nordpool_sensor_id"
+        }
+      },
+      "electricity_vat": {
+        "description": "config.step.electricity_vat.description",
+        "data": {
+          "electricity_vat": "config.step.electricity_vat.data.electricity_vat"
         }
       }
     }
@@ -18,7 +23,7 @@
       "init": {
         "description": "These values allow adjusting the presented prices for importing and exporting electricity. Please refer to the documentation if a field is unclear.",
         "data": {
-          "nordpool_sensor_id": "[%key:component::electricitypricelevels::config::step::user::data::nordpool_sensor_id%]",
+          "nordpool_sensor_id": "[%key:component::electricitypricelevels::config::step::nordpool_sensor_id::data::nordpool_sensor_id%]",
           "level_low": "Low threshold. Below this level, the price is considered low.",
           "level_high": "High threshold. Above this level, the price is considered high.",
           "supplier_balancing_fee": "Supplier balancing fee",
