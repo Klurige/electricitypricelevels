@@ -35,7 +35,7 @@
         }
       },
       "thresholds": {
-        "description": "Gränsvärden för när elen är dyr och billig.",
+        "description": "Gränsvärden för när elen är dyr respektive billig. Används för att dela upp priset i low, medium och high",
         "data": {
           "low_threshold": "Nedre gränsvärde.",
           "high_threshold": "Övre gränsvärde."
