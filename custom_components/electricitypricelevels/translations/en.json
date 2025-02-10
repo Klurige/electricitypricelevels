@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "description": "Fill in the Nordpool sensor. Please refer to the documentation if unclear.",
+        "description": "Fill in the values as needed. Refer to the documentation for more details.",
         "data": {
           "nordpool_sensor_id": "Name of the Nordpool sensor"
         }
@@ -35,7 +35,7 @@
         }
       },
       "thresholds": {
-        "description": "Thresholds for when electricity is expensive and cheap.",
+        "description": "Thresholds for high and low electricity prices.",
         "data": {
           "low_threshold": "Lower threshold.",
           "high_threshold": "Upper threshold."
@@ -46,7 +46,7 @@
   "options": {
     "step": {
       "init": {
-        "description": "These values allow adjusting the presented prices for importing and exporting electricity. Please refer to the documentation if a field is unclear.",
+        "description": "Electricity prices are based on the spot price and can be adjusted for import and export. Refer to the documentation for more details.",
         "data": {
           "nordpool_sensor_id": "Name of the Nordpool sensor",
           "low_threshold": "Lower threshold.",
