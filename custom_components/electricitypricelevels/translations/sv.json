@@ -46,23 +46,23 @@
   "options": {
     "step": {
       "init": {
-        "description": "[%key:component::electricitypricelevels::options::step::init::description%]",
+        "description": "Elpriset utgår från spotpriset och kan justeras för import och export av el. Se dokumentationen för mer detaljer.",
         "data": {
-          "nordpool_sensor_id": "[%key:component::electricitypricelevels::config::step::nordpool_sensor_id::data::nordpool_sensor_id%]",
-          "low_threshold": "[%key:component::electricitypricelevels::config::step::thresholds::data::low_threshold%]",
-          "high_threshold": "[%key:component::electricitypricelevels::config::step::thresholds::data::high_threshold%]",
-          "supplier_note": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_note%]",
-          "supplier_fixed_fee": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_fixed_fee%]",
-          "supplier_variable_fee": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_variable_fee%]",
-          "supplier_fixed_credit": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_fixed_credit%]",
-          "supplier_variable_credit": "[%key:component::electricitypricelevels::config::step::supplier_fees_and_credits::data::supplier_variable_credit%]",
-          "grid_note": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_note%]",
-          "grid_fixed_fee": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_fixed_fee%]",
-          "grid_variable_fee": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_variable_fee%]",
-          "grid_fixed_credit": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_fixed_credit%]",
-          "grid_variable_credit": "[%key:component::electricitypricelevels::config::step::grid_fees_and_credits::data::grid_variable_credit%]",
-          "grid_energy_tax": "[%key:component::electricitypricelevels::config::step::taxes_and_vat::data::grid_energy_tax%]",
-          "electricity_vat": "[%key:component::electricitypricelevels::config::step::taxes_and_vat::data::electricity_vat%]"
+          "nordpool_sensor_id": "Namn på nordpoolsensorn.",
+          "low_threshold": "Nedre gränsvärde.",
+          "high_threshold": "Övre gränsvärde.",
+          "supplier_note": "Noteringar om elhandelsavgifter och intäkter.",
+          "supplier_fixed_fee": "Elhandelspåslag per enhet vid import",
+          "supplier_variable_fee": "Elhandelspåslag i procent vid import",
+          "supplier_fixed_credit": "Elhandelsavdrag per enhet vid export",
+          "supplier_variable_credit": "Elhandelsavdrag i procent vid export",
+          "grid_note": "Noteringar om elnätsavgifter och intäkter.",
+          "grid_fixed_fee": "Elnätsavgift per enhet",
+          "grid_variable_fee": "Elnätspåslag i procent",
+          "grid_fixed_credit": "Elnätsnytta per enhet",
+          "grid_variable_credit": "Elnätsintäkt i procent",
+          "grid_energy_tax": "Energiskatt per enhet",
+          "electricity_vat": "Elmoms i procent"
         }
       }
     }
