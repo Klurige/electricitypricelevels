@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 import json
+import datetime
+from cmath import inf
 
+import pytz
 from homeassistant.components.sensor import (
     DOMAIN as SENSOR_DOMAIN,
     SensorDeviceClass,
@@ -38,18 +41,18 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
     def __init__(self, hass, entry: ConfigEntry, device_info) -> None:
         self._nordpool_sensor_id = entry.options.get(CONF_NORDPOOL_SENSOR_ID, "")
-        self._high_threshold = entry.options.get(CONF_HIGH_THRESHOLD, 0.0)
-        self._low_threshold = entry.options.get(CONF_LOW_THRESHOLD, 0.0)
-        self._supplier_fixed_fee = entry.options.get(CONF_SUPPLIER_FIXED_FEE, 0.0)
-        self._supplier_variable_fee = entry.options.get(CONF_SUPPLIER_VARIABLE_FEE, 0.0)
-        self._supplier_fixed_credit = entry.options.get(CONF_SUPPLIER_FIXED_CREDIT, 0.0)
-        self._supplier_variable_credit = entry.options.get(CONF_SUPPLIER_VARIABLE_CREDIT, 0.0)
-        self._grid_fixed_fee = entry.options.get(CONF_GRID_FIXED_FEE, 0.0)
-        self._grid_variable_fee = entry.options.get(CONF_GRID_VARIABLE_FEE, 0.0)
-        self._grid_fixed_credit = entry.options.get(CONF_GRID_FIXED_CREDIT, 0.0)
-        self._grid_variable_credit = entry.options.get(CONF_GRID_VARIABLE_CREDIT, 0.0)
-        self._grid_energy_tax = entry.options.get(CONF_GRID_ENERGY_TAX, 0.0)
-        self._electricity_vat = entry.options.get(CONF_ELECTRICITY_VAT, 0.0)
+        self._high_threshold = entry.options.get(CONF_HIGH_THRESHOLD, 0.0) or 1000000000.0
+        self._low_threshold = entry.options.get(CONF_LOW_THRESHOLD, 0.0) or -1000000000.0
+        self._supplier_fixed_fee = entry.options.get(CONF_SUPPLIER_FIXED_FEE, 0.0) or 0.0
+        self._supplier_variable_fee = entry.options.get(CONF_SUPPLIER_VARIABLE_FEE, 0.0) or 0.0
+        self._supplier_fixed_credit = entry.options.get(CONF_SUPPLIER_FIXED_CREDIT, 0.0) or 0.0
+        self._supplier_variable_credit = entry.options.get(CONF_SUPPLIER_VARIABLE_CREDIT, 0.0) or 0.0
+        self._grid_fixed_fee = entry.options.get(CONF_GRID_FIXED_FEE, 0.0) or 0.0
+        self._grid_variable_fee = entry.options.get(CONF_GRID_VARIABLE_FEE, 0.0) or 0.0
+        self._grid_fixed_credit = entry.options.get(CONF_GRID_FIXED_CREDIT, 0.0) or 0.0
+        self._grid_variable_credit = entry.options.get(CONF_GRID_VARIABLE_CREDIT, 0.0) or 0.0
+        self._grid_energy_tax = entry.options.get(CONF_GRID_ENERGY_TAX, 0.0) or 0.0
+        self._electricity_vat = entry.options.get(CONF_ELECTRICITY_VAT, 0.0) or 0.0
 
         description = SensorEntityDescription(
             key="electricity_price",
@@ -72,6 +75,8 @@ class ElectricityPriceLevelSensor(SensorEntity):
         self._price_in_cents = False
         self._price_divisor = 1
         self._rates = []
+        self._rank = 0
+        self._max_rank = 0
 
         self._hass = hass
         self._attr_device_info = device_info
@@ -91,6 +96,8 @@ class ElectricityPriceLevelSensor(SensorEntity):
             "currency": self._currency,
             "price_in_cents": self._price_in_cents,
             "level": self._level,
+            "rank": self._rank,
+            "max_rank": self._max_rank,
             "low_threshold": self._low_threshold,
             "high_threshold": self._high_threshold,
             "rates": self._rates,
@@ -132,11 +139,9 @@ class ElectricityPriceLevelSensor(SensorEntity):
                 self._price_divisor = 100
             else:
                 self._price_divisor = 1
+
             incoming_value = float(incoming_value) / self._price_divisor
             self._raw = incoming_value
-            self._cost, self._credit = self.calculate_cost_and_credit(incoming_value)
-            self._level = self.calculate_level(self._cost)
-            self._state = self._cost
             self._unit_of_measurement = incoming_attributes.get("unit_of_measurement")
             self._device_class = incoming_attributes.get("device_class")
             self._icon = incoming_attributes.get("icon")
@@ -158,7 +163,28 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
         except ValueError:
             _LOGGER.error("Invalid nordpool value: %s", incoming_value)
+
         _LOGGER.debug("Got rates %s", len(self._rates))
+        current_rate = None
+        if len(self._rates) > 0:
+            local_tz = pytz.timezone(self._hass.config.time_zone)  # Get the time zone from Home Assistant
+            now = datetime.datetime.now(local_tz)
+
+            current_rate = next((rate for rate in self._rates if rate["start"] <= now < rate["end"]), None)
+        if current_rate:
+            self._cost = current_rate["cost"]
+            self._credit = current_rate["credit"]
+            self._level = current_rate["level"]
+            self._rank = current_rate["rank"]
+            self._max_rank = len(self._rates) - 1
+        else:
+            _LOGGER.error("No rate found for value: %s", incoming_value)
+            self._cost, self._credit = self.calculate_cost_and_credit(incoming_value)
+            self._level = self.calculate_level(self._cost)
+            self._rank = 0
+            self._max_rank = 0
+
+        self._state = self._cost
         self.async_write_ha_state()
 
     def _process_entry(self, entry, raw_ranked):
