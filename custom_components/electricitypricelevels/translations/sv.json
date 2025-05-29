@@ -4,7 +4,7 @@
       "user": {
         "description": "Fyll i värden vid behov. Se dokumentationen för mer detaljer.",
         "data": {
-          "nordpool_sensor_id": "Namn på nordpoolsensorn."
+          "nordpool_area_id": "Nord Pool area id (SE4, BE, etc)"
         }
       },
       "supplier_fees_and_credits": {
@@ -48,7 +48,7 @@
       "init": {
         "description": "Elpriset utgår från spotpriset och kan justeras för import och export av el. Se dokumentationen för mer detaljer.",
         "data": {
-          "nordpool_sensor_id": "Namn på nordpoolsensorn.",
+          "nordpool_area_id": "Nord Pool area id (SE4, BE, etc)",
           "low_threshold": "Nedre gränsvärde.",
           "high_threshold": "Övre gränsvärde.",
           "supplier_note": "Noteringar om elhandelsavgifter och intäkter.",

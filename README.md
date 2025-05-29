@@ -56,20 +56,20 @@ configuration of the integration. The configuration can be found in the integrat
 I have added to the configuration taxes and fees added by my grid and supplier. They are no doubt
 called differently for other grids and suppliers.
 
-| Key                      | Description                 |
-|--------------------------|-----------------------------|
-| `nordpool_sensor_id`     | Name of the Nordpool sensor |
-| `supplier_balancing_fee`   | Supplier balancing fee      |
-| `supplier_environment_fee` | Supplier environment fee    |
-| `supplier_certificate_fee` | Supplier certificate fee    |
-| `supplier_fixed_fee`     | Supplier fixed fee          |
-| `supplier_credit`        | Supplier credit             |
-| `grid_fixed_fee`         | Grid fixed fee              |
-| `grid_variable_fee`      | Grid variable fee           |
-| `grid_energy_tax`        | Grid energy tax             |
-| `electricity_vat`        | Electricity VAT             |
-| `grid_fixed_credit`      | Grid fixed credit           |
-| `grid_variable_credit`   | Grid variable credit        |
+| Key                      | Description              |
+|--------------------------|--------------------------|
+| `nordpool_area_id`     | Nord Pool Area id        |
+| `supplier_balancing_fee`   | Supplier balancing fee   |
+| `supplier_environment_fee` | Supplier environment fee |
+| `supplier_certificate_fee` | Supplier certificate fee |
+| `supplier_fixed_fee`     | Supplier fixed fee       |
+| `supplier_credit`        | Supplier credit          |
+| `grid_fixed_fee`         | Grid fixed fee           |
+| `grid_variable_fee`      | Grid variable fee        |
+| `grid_energy_tax`        | Grid energy tax          |
+| `electricity_vat`        | Electricity VAT          |
+| `grid_fixed_credit`      | Grid fixed credit        |
+| `grid_variable_credit`   | Grid variable credit     |
 
 
 ## Sensors

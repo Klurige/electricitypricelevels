@@ -4,7 +4,7 @@
       "user": {
         "description": "Fill in the values as needed. Refer to the documentation for more details.",
         "data": {
-          "nordpool_sensor_id": "Name of the Nordpool sensor"
+          "nordpool_area_id": "Nord Pool Area id (SE4, BE, etc)"
         }
       },
       "supplier_fees_and_credits": {
@@ -48,7 +48,7 @@
       "init": {
         "description": "Electricity prices are based on the spot price and can be adjusted for import and export. Refer to the documentation for more details.",
         "data": {
-          "nordpool_sensor_id": "Name of the Nordpool sensor",
+          "nordpool_area_id": "Nord Pool Area id (SE4, BE, etc)",
           "low_threshold": "Lower threshold.",
           "high_threshold": "Upper threshold.",
           "supplier_note": "Notes on supplier fees and credits.",

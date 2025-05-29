@@ -1,4 +1,4 @@
-"""Support for the ElectricityPriceLevel sensor service."""
+"""Support for the ElectricityPriceLevel time sensor service."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ import asyncio
 import datetime
 import logging
 
-import pytz
+# Remove pytz import if it's no longer used elsewhere
+# import pytz
 from homeassistant.components.sensor import (
     DOMAIN as SENSOR_DOMAIN,
     SensorDeviceClass,
@@ -14,6 +15,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.util import dt as dt_util # Import dt_util
 
 from ..util import generate_level_pattern
 
@@ -62,7 +64,7 @@ class TimeSensor(SensorEntity):
 
     async def _send_initial_value(self):
         """Send the initial value with current time, seconds and ms set to 0."""
-        local_tz = pytz.timezone(self._hass.config.time_zone)  # Get the time zone from Home Assistant
+        local_tz = dt_util.get_time_zone(self._hass.config.time_zone)  # Get the time zone from Home Assistant
         now = datetime.datetime.now(local_tz)
         await self._update_time(now)
 
