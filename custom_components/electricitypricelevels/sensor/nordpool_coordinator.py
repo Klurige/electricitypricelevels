@@ -255,3 +255,4 @@ class NordpoolDataCoordinator:
             _LOGGER.info("Nordpool data coordinator stopped. No active task to cancel.")
         self._current_schedule_state[0] = "STOPPED"
 
+

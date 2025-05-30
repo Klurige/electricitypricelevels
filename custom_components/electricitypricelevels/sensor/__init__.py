@@ -69,3 +69,4 @@ async def async_setup_entry(
 
     entry.async_on_unload(_async_cleanup_nordpool_task)
 
+
