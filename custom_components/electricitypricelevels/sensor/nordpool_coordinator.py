@@ -76,7 +76,6 @@ class NordpoolDataCoordinator:
 
                     final_payload = {
                         "currency": determined_currency,
-                        "unit_of_measurement": "MWh",
                         "raw": price_data_list
                     }
                     return "SUCCESS_DATA", final_payload
