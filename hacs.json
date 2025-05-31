@@ -1,5 +1,8 @@
 {
     "name": "ElectricityPriceLevels",
-    "render_readme": true,
+    "homeassistant": "2025.0.0",
+    "iot_class": "calculated",
     "content_in_root": false,
-  }
+    "render_readme": true,
+    "country": ["AT", "BE", "DK", "EE", "FI", "FR", "DE", "LV", "LT", "LU", "NL", "NO", "PL", "SE", "UK"]
+}
