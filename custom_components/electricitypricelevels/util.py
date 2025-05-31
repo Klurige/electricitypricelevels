@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -14,12 +15,12 @@ def generate_level_pattern(rates):
         return "U" * (pattern_length_in_hours * 60 // step_in_minutes)
     start_time = rates[0]["start"]
     if isinstance(start_time, str):
-        start_time = datetime.datetime.fromisoformat(start_time)
+        start_time = dt_util.parse_datetime(start_time)
 
     end_time = start_time + datetime.timedelta(hours=pattern_length_in_hours)
 
     current_start = start_time
-    current_end = current_start + datetime.timedelta(minutes=step_in_minutes)
+    current_end = current_start + datetime.timedelta(minutes=step_in_minutes,microseconds=-1)
 
     while current_end <= end_time:
         level = "U"
@@ -36,6 +37,7 @@ def generate_level_pattern(rates):
             rate_end = rate["end"]
             if isinstance(rate_end, str):
                 rate_end = datetime.datetime.fromisoformat(rate_end)
+
             if current_start >= rate_start and current_end <= rate_end:
                 if rate["level"] == "Low":
                     level_sum += 1

@@ -1,4 +1,3 @@
-# custom_components/electricitypricelevels/sensor/nordpool_coordinator.py
 import logging
 from datetime import timedelta, date, datetime, time
 from typing import Callable, Any, Coroutine
@@ -17,9 +16,15 @@ class NordpoolDataCoordinator:
         self.nordpool_config_entry_id = nordpool_config_entry_id
         self.data_update_callback = data_update_callback
         self._task_remover: list[Callable | None] = [None]
-        self._collected_for_date: list[date | None] = [None]
         self._current_schedule_state: list[str] = ["INITIALIZING"]
         self._is_running = False
+
+        self._currency: str | None = None
+        self._data_for_current_hass_date: list | None = None # Raw price list for current HASS date
+        self._date_of_current_data: date | None = None       # The HASS date for which _data_for_current_hass_date is valid
+
+        self._data_for_next_hass_date: list | None = None    # Raw price list for current HASS date + 1
+        self._date_of_next_data: date | None = None          # The HASS date for which _data_for_next_hass_date is valid
 
     async def _execute_nordpool_call_logic(self, fetch_date: date) -> tuple[str, dict[str, Any] | None]:
         date_to_fetch_str = fetch_date.isoformat()
@@ -67,12 +72,10 @@ class NordpoolDataCoordinator:
                         )
 
                     if not determined_currency:
-                        _LOGGER.error(
-                            "Currency could not be determined. "
-                            "The 'currency' field in the data payload will be None. This might cause issues in the sensor."
+                        _LOGGER.warning(
+                            "Currency could not be determined from this fetch. "
+                            "The 'currency' field in the data payload will be None."
                         )
-                        # Consider if this should be a hard error:
-                        # return "ERROR_MISSING_CURRENCY", None
 
                     final_payload = {
                         "currency": determined_currency,
@@ -100,6 +103,41 @@ class NordpoolDataCoordinator:
             _LOGGER.error(f"Unexpected error calling Nordpool service for {date_to_fetch_str}: {e}", exc_info=True)
             return "ERROR_OTHER", None
 
+    async def _send_updated_data_to_sensor(self, current_hass_date: date) -> None:
+        """Combines available data and sends it to the sensor via callback."""
+        combined_raw_data = []
+        data_sent = False
+
+        if self._data_for_current_hass_date and self._date_of_current_data == current_hass_date:
+            combined_raw_data.extend(self._data_for_current_hass_date)
+            _LOGGER.debug(f"Including data for {self._date_of_current_data} (current day) in payload.")
+        elif self._data_for_current_hass_date:
+            _LOGGER.warning(f"Not including stale current_day_data (for {self._date_of_current_data}) in payload for HASS date {current_hass_date}.")
+
+        expected_next_day_date = current_hass_date + timedelta(days=1)
+        if self._data_for_next_hass_date and self._date_of_next_data == expected_next_day_date:
+            combined_raw_data.extend(self._data_for_next_hass_date)
+            _LOGGER.debug(f"Including data for {self._date_of_next_data} (next day) in payload.")
+        elif self._data_for_next_hass_date:
+             _LOGGER.warning(f"Not including stale next_day_data (for {self._date_of_next_data}) in payload for HASS date {current_hass_date} (expected next: {expected_next_day_date}).")
+
+        if combined_raw_data:
+            if not self._currency:
+                _LOGGER.warning("Sending data to sensor but coordinator's currency is not set. This might cause issues.")
+
+            payload_to_send = {
+                "currency": self._currency,
+                "raw": combined_raw_data
+            }
+            _LOGGER.info(f"Sending updated combined data to sensor. Dates covered: current_hass_date={current_hass_date} (data for {self._date_of_current_data if self._data_for_current_hass_date else 'None'}), next_day_date={expected_next_day_date} (data for {self._date_of_next_data if self._data_for_next_hass_date else 'None'}). Total points: {len(combined_raw_data)}")
+            await self.data_update_callback(payload_to_send)
+            data_sent = True
+        else:
+            _LOGGER.info(f"No valid combined data to send to sensor for HASS date {current_hass_date}.")
+
+        if not data_sent and (self._data_for_current_hass_date or self._data_for_next_hass_date):
+            _LOGGER.debug(f"Data was available (current: {self._date_of_current_data}, next: {self._date_of_next_data}) but not sent for HASS date {current_hass_date}, likely due to date mismatch.")
+
 
     @callback
     async def _trigger_and_reschedule_nordpool(self, utc_now_from_scheduler: datetime | None = None) -> None:
@@ -109,76 +147,117 @@ class NordpoolDataCoordinator:
 
         hass_tz = dt_util.get_time_zone(self.hass.config.time_zone)
         hass_now = datetime.now(hass_tz)
-        current_date = hass_now.date()
+        current_hass_date = hass_now.date()
 
-        target_fetch_date: date
-        current_operation_type: str
+        # 1. Midnight Rollover Logic
+        if self._date_of_current_data and self._date_of_current_data < current_hass_date:
+            _LOGGER.info(
+                f"Midnight rollover: Current HASS date is {current_hass_date}. "
+                f"Old current data was for {self._date_of_current_data}, next data for {self._date_of_next_data}."
+            )
+            self._data_for_current_hass_date = self._data_for_next_hass_date
+            self._date_of_current_data = self._date_of_next_data
+            # Currency remains as is, from the last successful fetch that set it.
 
-        if self._collected_for_date[0] is None or self._collected_for_date[0] < current_date:
-            target_fetch_date = current_date
+            self._data_for_next_hass_date = None
+            self._date_of_next_data = None
+            _LOGGER.info(
+                f"Rolled over. New current data is for {self._date_of_current_data}, "
+                f"next data is now None."
+            )
+
+        # 2. Determine what data to fetch
+        target_fetch_date: date | None = None
+        current_operation_type: str = "IDLE"
+        fetch_reason = ""
+
+        if not self._data_for_current_hass_date or self._date_of_current_data != current_hass_date:
+            target_fetch_date = current_hass_date
             current_operation_type = "TODAY"
-            _LOGGER.debug(f"Targeting today's data ({target_fetch_date}). Previously collected for: {self._collected_for_date[0]}")
-        else:
-            target_fetch_date = current_date + timedelta(days=1)
+            fetch_reason = f"current data missing or stale (is {self._date_of_current_data})"
+        elif self._date_of_current_data == current_hass_date and \
+             (not self._data_for_next_hass_date or self._date_of_next_data != (current_hass_date + timedelta(days=1))):
+            target_fetch_date = current_hass_date + timedelta(days=1)
             current_operation_type = "TOMORROW"
-            _LOGGER.debug(f"Targeting tomorrow's data ({target_fetch_date}). Today ({current_date}) collected for: {self._collected_for_date[0]}")
+            fetch_reason = f"next data missing or stale (is {self._date_of_next_data})"
+        else:
+            _LOGGER.debug(f"Data for today ({self._date_of_current_data}) and tomorrow ({self._date_of_next_data}) appears up-to-date for HASS date {current_hass_date}.")
 
-        call_status, nordpool_data = await self._execute_nordpool_call_logic(target_fetch_date)
-        next_delay_seconds = None
-        new_log_state_name = self._current_schedule_state[0]
+        call_status = "NOT_ATTEMPTED"
+        if target_fetch_date:
+            _LOGGER.info(f"Attempting to fetch data for {target_fetch_date} (Operation: {current_operation_type}, Reason: {fetch_reason})")
+            call_status, nordpool_day_payload = await self._execute_nordpool_call_logic(target_fetch_date)
 
-        if call_status == "SUCCESS_DATA":
-            _LOGGER.info(f"Successfully fetched data for {target_fetch_date} (Operation: {current_operation_type}).")
-            self._collected_for_date[0] = target_fetch_date
+            if call_status == "SUCCESS_DATA" and nordpool_day_payload:
+                _LOGGER.info(f"Successfully fetched data for {target_fetch_date} (Operation: {current_operation_type}).")
+                new_raw_data = nordpool_day_payload.get("raw")
+                new_currency = nordpool_day_payload.get("currency")
 
-            if nordpool_data:
-                await self.data_update_callback(nordpool_data)
-            else:
-                _LOGGER.error(f"CRITICAL: SUCCESS_DATA status but no data received for {target_fetch_date}. This indicates an issue in _execute_nordpool_call_logic.")
+                if new_currency:
+                    if self._currency and self._currency != new_currency:
+                        _LOGGER.warning(f"Currency changed from {self._currency} to {new_currency}. Using new currency.")
+                    self._currency = new_currency
+                elif not self._currency:
+                     _LOGGER.warning(f"Fetched data for {target_fetch_date} has no currency, and no prior currency is set for coordinator.")
 
-            if current_operation_type == "TODAY":
-                today_14h = hass_now.replace(hour=14, minute=0, second=0, microsecond=0)
-                if hass_now < today_14h:
-                    next_run_time_target = today_14h
-                    new_log_state_name = "WAITING_FOR_14H_TO_FETCH_TOMORROW"
-                else: # Post 14:00 or exactly at 14:00
-                    next_run_time_target = hass_now # Effectively schedule immediately for tomorrow
-                    new_log_state_name = "FETCHING_TOMORROW_POST_14H_AFTER_TODAY_SUCCESS"
+                if current_operation_type == "TODAY":
+                    self._data_for_current_hass_date = new_raw_data
+                    self._date_of_current_data = target_fetch_date
+                elif current_operation_type == "TOMORROW":
+                    self._data_for_next_hass_date = new_raw_data
+                    self._date_of_next_data = target_fetch_date
+            elif call_status != "NOT_ATTEMPTED":
+                _LOGGER.warning(f"Nordpool call for {target_fetch_date} (Op: {current_operation_type}) resulted in status: {call_status}.")
 
-                next_delay_seconds = (next_run_time_target - hass_now).total_seconds()
-                if next_delay_seconds <= 0 and new_log_state_name == "FETCHING_TOMORROW_POST_14H_AFTER_TODAY_SUCCESS":
-                    next_delay_seconds = 0.1 # Small delay to ensure next task is scheduled
-                elif next_delay_seconds < 0: # Should not happen if logic is correct
-                     next_delay_seconds = 0
+        # 3. Send data to sensor (always attempts to send current valid state)
+        await self._send_updated_data_to_sensor(current_hass_date)
 
-            else:  # current_operation_type == "TOMORROW"
-                # Schedule for next day's 14:00 to check for the day after's prices
-                next_day_14h = (hass_now + timedelta(days=1)).replace(hour=14, minute=0, second=0, microsecond=0)
-                next_delay_seconds = (next_day_14h - hass_now).total_seconds()
-                new_log_state_name = "DAILY_SCHEDULE_FOR_NEXT_TOMORROW_14H"
+        # 4. Rescheduling Logic
+        next_delay_seconds: float
+        new_log_state_name: str
 
-        elif call_status in ("SUCCESS_NO_DATA", "ERROR_OTHER", "ERROR_SERVICE_NOT_READY", "ERROR_MISSING_CURRENCY", "ERROR_BAD_RESPONSE_STRUCTURE"):
-            _LOGGER.warning(f"Nordpool call for {target_fetch_date} (Op: {current_operation_type}) failed or no data/currency/bad_structure. Status: {call_status}.")
-            if current_operation_type == "TODAY":
-                next_delay_seconds = 10
-                new_log_state_name = f"RETRYING_TODAY_10S ({call_status})"
-            else:  # current_operation_type == "TOMORROW"
-                if self._collected_for_date[0] == current_date and hass_now.time() < time(14, 0): # Failed before 14:00 for tomorrow
-                    target_14h_datetime = hass_now.replace(hour=14, minute=0, second=0, microsecond=0)
-                    if target_14h_datetime > hass_now:
-                        next_delay_seconds = (target_14h_datetime - hass_now).total_seconds()
-                        new_log_state_name = f"FAILED_TOMORROW_PRE_14H_WAITING_UNTIL_14H ({call_status})"
-                    else: # Exactly at 14:00 or slightly past due to execution time
-                        next_delay_seconds = 15 * 60
-                        new_log_state_name = f"RETRYING_TOMORROW_15M_AT_14H_TRANSITION ({call_status})"
-                else: # Failed after 14:00 for tomorrow, or today's data not yet collected
-                    next_delay_seconds = 15 * 60
-                    new_log_state_name = f"RETRYING_TOMORROW_15M ({call_status})"
-        else: # Unhandled status
+        # Re-evaluate current state of data *after* the potential fetch in this cycle.
+        todays_data_is_now_ok = (self._data_for_current_hass_date and self._date_of_current_data == current_hass_date)
+        expected_tomorrows_date = current_hass_date + timedelta(days=1)
+        tomorrows_data_is_now_ok = (self._data_for_next_hass_date and self._date_of_next_data == expected_tomorrows_date)
+
+        if not todays_data_is_now_ok:
+            # Today's data is still missing/stale. Retry in 15 seconds.
+            next_delay_seconds = 15
+            new_log_state_name = f"RETRYING_TODAY_DATA_IN_15S (last_fetch_status: {call_status}, op_attempted: {current_operation_type})"
+            _LOGGER.warning(f"Today's data for {current_hass_date} is missing or stale ({self._date_of_current_data}). {new_log_state_name}")
+        elif not tomorrows_data_is_now_ok:
+            # Today's data is OK, but tomorrow's is not.
+            _LOGGER.info(f"Today's data for {current_hass_date} is OK. Next day's data ({expected_tomorrows_date}) is missing or stale ({self._date_of_next_data if self._date_of_next_data else 'None'}).")
+            time_14h00 = hass_now.replace(hour=14, minute=0, second=0, microsecond=0)
+            time_13h55 = hass_now.replace(hour=13, minute=55, second=0, microsecond=0)
+
+            # If we just successfully fetched TODAY's data, and it's 14:00 or later,
+            # schedule an almost immediate attempt for TOMORROW's data.
+            if current_operation_type == "TODAY" and call_status == "SUCCESS_DATA" and todays_data_is_now_ok and hass_now >= time_14h00:
+                next_delay_seconds = 0.1 # Almost immediate
+                new_log_state_name = f"TODAY_OK_IMMEDIATE_FETCH_TOMORROW_POST_14H (last_op_today_status: {call_status})"
+            elif hass_now >= time_13h55:
+                # Actively retry for tomorrow's data every 15 seconds if it's after 13:55.
+                next_delay_seconds = 15
+                new_log_state_name = f"RETRYING_TOMORROW_DATA_ACTIVE_IN_15S (last_fetch_status: {call_status}, op_attempted: {current_operation_type})"
+            else: # Before 13:55, wait until 13:55 to start fetching tomorrow's data.
+                next_run_time_target = time_13h55
+                next_delay_seconds = max(0.1, (next_run_time_target - hass_now).total_seconds())
+                new_log_state_name = f"WAIT_UNTIL_13:55_FOR_TOMORROW (last_fetch_status: {call_status}, op_attempted: {current_operation_type})"
+        else:
+            # Both today's and tomorrow's data are OK and up-to-date.
+            _LOGGER.info(f"Data for today ({current_hass_date}) and tomorrow ({expected_tomorrows_date}) are up-to-date.")
+            next_day_13h55 = (hass_now + timedelta(days=1)).replace(hour=13, minute=55, second=0, microsecond=0)
+            next_delay_seconds = max(0.1, (next_day_13h55 - hass_now).total_seconds())
+            new_log_state_name = "DAILY_SCHEDULE_NEXT_CHECK_TOMORROW_13:55"
+
+        if target_fetch_date and call_status not in ("SUCCESS_DATA", "SUCCESS_NO_DATA", "ERROR_OTHER", "ERROR_SERVICE_NOT_READY", "ERROR_MISSING_CURRENCY", "ERROR_BAD_RESPONSE_STRUCTURE", "NOT_ATTEMPTED"):
             _LOGGER.error(f"Unhandled call_status: {call_status} for {target_fetch_date}. Fallback retry in 5 mins.")
-            next_delay_seconds = 5 * 60
-            new_log_state_name = f"ERROR_UNHANDLED_STATUS_FALLBACK ({call_status})"
+            next_delay_seconds = 5 * 60 # Override previous delay if unhandled status
+            new_log_state_name = f"ERROR_UNHANDLED_STATUS_FALLBACK_5M ({call_status})"
 
+        # Cancel previous task and schedule next one
         if self._task_remover[0]:
             try:
                 self._task_remover[0]()
@@ -190,46 +269,37 @@ class NordpoolDataCoordinator:
             _LOGGER.info("Coordinator stopped before scheduling next call.")
             return
 
-        if next_delay_seconds is not None:
-            if next_delay_seconds < 1 and next_delay_seconds != 0.1 : # Allow 0.1 for immediate reschedule
-                _LOGGER.warning(
-                    f"Calculated next_delay_seconds was {next_delay_seconds:.2f}. Adjusting to 1 second. State: {new_log_state_name}"
-                )
-                next_delay_seconds = 1
+        if next_delay_seconds <= 0: # Ensure delay is positive, run almost immediately if calculated in past
+            _LOGGER.warning(f"Calculated next_delay_seconds was {next_delay_seconds:.2f}. Adjusting to 0.1 second. State: {new_log_state_name}")
+            next_delay_seconds = 0.1
+        elif next_delay_seconds < 1 and next_delay_seconds != 0.1: # For very small positive delays (but not our special 0.1s), make it 1s
+             _LOGGER.warning(f"Calculated next_delay_seconds was {next_delay_seconds:.2f}. Adjusting to 1 second. State: {new_log_state_name}")
+             next_delay_seconds = 1
 
-            if next_delay_seconds == 0.1:
-                 _LOGGER.info(f"Scheduling next Nordpool call almost immediately (0.1s) (New State: {new_log_state_name}).")
-            else:
-                _LOGGER.info(f"Scheduling next Nordpool call in {next_delay_seconds:.0f} seconds (New State: {new_log_state_name}).")
-
-            self._current_schedule_state[0] = new_log_state_name
-            self._task_remover[0] = async_call_later(
-                self.hass,
-                timedelta(seconds=next_delay_seconds),
-                self._trigger_and_reschedule_nordpool
-            )
-        else: # Should not happen if all paths set next_delay_seconds
-            _LOGGER.error(
-                f"Critical: Nordpool scheduling logic failed to determine next_delay_seconds. "
-                f"Call status: '{call_status}', Operation: {current_operation_type}, Target: {target_fetch_date}. "
-                f"Last state: {self._current_schedule_state[0]}. Fallback scheduling in 5 mins."
-            )
-            self._current_schedule_state[0] = "ERROR_NO_DELAY_FALLBACK"
-            self._task_remover[0] = async_call_later(
-                self.hass,
-                timedelta(seconds=5*60), # 5 minutes
-                self._trigger_and_reschedule_nordpool
-            )
+        _LOGGER.info(f"Scheduling next Nordpool call in {next_delay_seconds:.2f} seconds (New State: {new_log_state_name}).")
+        self._current_schedule_state[0] = new_log_state_name
+        self._task_remover[0] = async_call_later(
+            self.hass,
+            timedelta(seconds=next_delay_seconds),
+            self._trigger_and_reschedule_nordpool
+        )
 
     def start(self) -> None:
         if self._is_running:
             _LOGGER.warning("Coordinator already running.")
             return
         self._is_running = True
-        self._current_schedule_state[0] = "INITIAL_CALL_SCHEDULED"
-        _LOGGER.info(f"Scheduling initial Nordpool call attempt in 1 second. State: {self._current_schedule_state[0]}")
+        # Reset data on start to ensure fresh fetches
+        self._currency = None
+        self._data_for_current_hass_date = None
+        self._date_of_current_data = None
+        self._data_for_next_hass_date = None
+        self._date_of_next_data = None
 
-        if self._task_remover[0]: # Ensure no old timer is lingering
+        self._current_schedule_state[0] = "INITIAL_CALL_SCHEDULED"
+        _LOGGER.info(f"Nordpool coordinator starting. Scheduling initial data fetch. State: {self._current_schedule_state[0]}")
+
+        if self._task_remover[0]:
             try:
                 self._task_remover[0]()
             except Exception:
@@ -238,7 +308,7 @@ class NordpoolDataCoordinator:
 
         self._task_remover[0] = async_call_later(
             self.hass,
-            timedelta(seconds=1),
+            timedelta(milliseconds=100),
             self._trigger_and_reschedule_nordpool
         )
 

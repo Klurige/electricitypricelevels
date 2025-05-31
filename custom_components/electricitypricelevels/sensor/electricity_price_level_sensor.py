@@ -83,7 +83,6 @@ class ElectricityPriceLevelSensor(SensorEntity):
         self._currency = None
         self._rates = []
         self._rank = 0
-        self._max_rank = 0
 
         self._attr_device_info = device_info
 
@@ -136,7 +135,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
         self._state = round(self._cost, 5)
         self.async_write_ha_state()
         _LOGGER.info(
-            f"Sensor state refreshed: Cost={self._state} {self._currency}/{self._unit}, Level={self._level}, RawSpot={self._spot_price}, Rank={self._rank}/{self._max_rank}"
+            f"Sensor state refreshed: Cost={self._state} {self._currency}/{self._unit}, Level={self._level}, RawSpot={self._spot_price}, Rank={self._rank}/100"
         )
 
     @property
@@ -153,7 +152,6 @@ class ElectricityPriceLevelSensor(SensorEntity):
             "currency": self._currency,
             "level": self._level,
             "rank": self._rank,
-            "max_rank": self._max_rank,
             "low_threshold": self._low_threshold,
             "high_threshold": self._high_threshold,
             "rates": self._rates,
@@ -188,6 +186,15 @@ class ElectricityPriceLevelSensor(SensorEntity):
                 local_tz_str = self._hass.config.time_zone
                 local_tz = dt_util.get_time_zone(local_tz_str)
                 now_local = datetime.datetime.now(local_tz)
+                today_local = now_local.date()
+
+                # Purge old rates
+                original_rate_count = len(self._rates)
+                self._rates = [rate for rate in self._rates if rate["start"].date() >= today_local]
+                purged_count = original_rate_count - len(self._rates)
+                if purged_count > 0:
+                    _LOGGER.debug(f"Purged {purged_count} old entries from self._rates. Current count: {len(self._rates)}")
+
                 _LOGGER.debug("Finding current rate for time: %s in timezone %s", now_local, local_tz_str)
 
                 current_rate_details = next((rate for rate in self._rates if rate["start"] <= now_local < rate["end"]), None)
@@ -205,25 +212,25 @@ class ElectricityPriceLevelSensor(SensorEntity):
             self._cost = current_rate_details["cost"]
             self._credit = current_rate_details["credit"]
             self._level = current_rate_details["level"]
-            self._rank = current_rate_details.get("rank", 0)
 
-            current_rate_date = current_rate_details["start"].date()
-            rates_for_current_day = [r for r in self._rates if r["start"].date() == current_rate_date]
-            self._max_rank = len(rates_for_current_day) - 1 if rates_for_current_day else 0
-            if self._max_rank < 0: self._max_rank = 0
+            processed_rank = current_rate_details.get("rank")
+
+            if isinstance(processed_rank, (int, float)):
+                self._rank = processed_rank
+            else:
+                self._rank = processed_rank if processed_rank == "N/A" else 0
 
             current_rate_end_time_local = current_rate_details["end"]
             _LOGGER.debug(
-                f"Sensor state updated from current_rate: spot_price={self._spot_price}, cost={self._cost}, level={self._level}, rank={self._rank}/{self._max_rank}. Slot ends at {current_rate_end_time_local}"
+                f"Sensor state updated from current_rate: spot_price={self._spot_price}, cost={self._cost}, level={self._level}, rank={self._rank}/100. Slot ends at {current_rate_end_time_local}"
             )
         else:
-            _LOGGER.warning("No current rate found in self._rates for the current time. Sensor state will be 'Unknown'/0.")
+            _LOGGER.warning("No current rate found in self._rates for the current time. Sensor state will be 'Unknown'.")
             self._level = "Unknown"
             self._spot_price = 0.0
             self._cost = 0.0
             self._credit = 0.0
             self._rank = 0
-            self._max_rank = 0
 
         return current_rate_end_time_local
 
@@ -291,7 +298,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
         self._state = round(self._cost, 5)
         self.async_write_ha_state()
         _LOGGER.info(
-            f"Sensor state updated via async_update_data: Cost={self._state} {self._currency}/{self._unit}, Level={self._level}, RawSpot={self._spot_price}, Rank={self._rank}/{self._max_rank}"
+            f"Sensor state updated via async_update_data: Cost={self._state} {self._currency}/{self._unit}, Level={self._level}, RawSpot={self._spot_price}, Rank={self._rank}/100"
         )
 
 
@@ -306,14 +313,26 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
         cost, credit = self.calculate_cost_and_credit(spot_price_kwh_main_unit)
         level = self.calculate_level(cost)
-        rank = "N/A"
+
+        rank_value = "N/A"
+        num_entries_today = len(daily_ranked_list)
 
         try:
-            rank = next(i for i, ranked_entry in enumerate(daily_ranked_list) if ranked_entry["start"] == start_local and ranked_entry["value"] == spot_price_kwh_main_unit)
+            if num_entries_today == 0:
+                pass
+            else:
+                current_0_indexed_rank = next(i for i, ranked_entry in enumerate(daily_ranked_list) if ranked_entry["start"] == start_local and ranked_entry["value"] == spot_price_kwh_main_unit)
+
+                if num_entries_today == 1:
+                    rank_value = 1
+                else:
+                    rank_value = math.floor((current_0_indexed_rank / (num_entries_today - 1)) * 99) + 1
+
         except StopIteration:
             _LOGGER.warning(f"Could not determine rank for entry starting at {start_local} with value {spot_price_kwh_main_unit}. Appending with rank 'N/A'.")
         except Exception as e:
             _LOGGER.error(f"Error determining rank for {start_local}: {e}", exc_info=True)
+            rank_value = "N/A"
 
         self._rates.append({
             "start": start_local,
@@ -322,7 +341,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
             "cost": cost,
             "credit": credit,
             "level": level,
-            "rank": rank
+            "rank": rank_value
         })
 
     def calculate_cost_and_credit(self, spot_price_main_unit_kwh: float):
@@ -357,8 +376,10 @@ class ElectricityPriceLevelSensor(SensorEntity):
         low = float(self._low_threshold)
         high = float(self._high_threshold)
 
+        _LOGGER.debug(f"Calculating level for cost: {cost_val}, low: {low}, high: {high}")
         if cost_val < low:
             return "Low"
         if cost_val > high:
             return "High"
         return "Medium"
+
