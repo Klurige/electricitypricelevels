@@ -162,6 +162,102 @@ card:
           color: red
 ```
 
+Or if you prefer one graph for today and one for tomorrow (These graphs also sets min and max values for the y-axis):
+
+```yaml
+type: custom:config-template-card
+variables:
+  thresholdLow: states["sensor.electricity_price"].attributes.low_threshold
+  thresholdHigh: states["sensor.electricity_price"].attributes.high_threshold
+entities:
+  - sensor.electricity_price
+card:
+  type: custom:apexcharts-card
+  header:
+    title: Elpriser idag
+    show: true
+    show_states: true
+  graph_span: 24h
+  span:
+    start: day
+  now:
+    show: true
+    label: Nu
+  experimental:
+    color_threshold: true
+  apex_config:
+    yaxis:
+      min: 0
+      max: 7
+  series:
+    - entity: sensor.electricity_price
+      name: Köp
+      type: column
+      color: green
+      float_precision: 2
+      extend_to: end
+      show:
+        in_header: before_now
+        extremas: true
+      data_generator: |
+        return entity.attributes.rates.map((rate, index) => {
+          return [new Date(rate["start"]).getTime(), rate["cost"]];
+        });
+      color_threshold:
+        - value: -1000000
+          color: green
+        - value: ${vars.thresholdLow}
+          color: yellow
+        - value: ${vars.thresholdHigh}
+          color: red
+```
+
+```yaml
+type: custom:config-template-card
+variables:
+  thresholdLow: states["sensor.electricity_price"].attributes.low_threshold
+  thresholdHigh: states["sensor.electricity_price"].attributes.high_threshold
+entities:
+  - sensor.electricity_price
+card:
+  type: custom:apexcharts-card
+  header:
+    title: Elpriser imorgon
+    show: true
+    show_states: true
+  graph_span: 24h
+  span:
+    start: day
+    offset: +24h
+  experimental:
+    color_threshold: true
+  apex_config:
+    yaxis:
+      min: 0
+      max: 7
+  series:
+    - entity: sensor.electricity_price
+      name: Köp
+      type: column
+      color: green
+      float_precision: 2
+      extend_to: end
+      data_generator: |
+        return entity.attributes.rates.map((rate, index) => {
+          return [new Date(rate["start"]).getTime(), rate["cost"]];
+        });
+      color_threshold:
+        - value: -1000000
+          color: green
+        - value: ${vars.thresholdLow}
+          color: yellow
+        - value: ${vars.thresholdHigh}
+          color: red
+      show:
+        extremas: true
+```
+
+
 ## Contributing
 Contributions are welcome! Please open issues or pull requests on GitHub.
 
