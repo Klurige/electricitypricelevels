@@ -1,4 +1,12 @@
-"""Support for the ElectricityPriceLevel sensor service."""
+"""
+This module provides the ElectricityPriceLevel sensor for Home Assistant.
+
+The sensor calculates the current electricity price level (Low, Medium, High)
+based on Nord Pool spot prices and user-defined thresholds and fees.
+It also provides the calculated cost and credit per kWh. The sensor
+updates its state when the underlying Nord Pool sensor for the configured
+area updates its price, or when new data is pushed to it.
+"""
 
 from __future__ import annotations
 
@@ -42,10 +50,26 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ElectricityPriceLevelSensor(SensorEntity):
+    """
+    Representation of an Electricity Price Level sensor.
+
+    This sensor entity monitors electricity prices from Nord Pool,
+    calculates costs and credits including various fees and taxes,
+    and determines if the current price is 'Low', 'Medium', or 'High'
+    based on user-defined thresholds.
+    """
     entity_description: SensorEntityDescription
     _attr_has_entity_name = True
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo) -> None:
+        """
+        Initialize the ElectricityPriceLevel sensor.
+
+        Args:
+            hass: The Home Assistant instance.
+            entry: The config entry for this sensor.
+            device_info: Device information for the entity.
+        """
         self._hass = hass
         self._entry = entry
 
@@ -92,7 +116,14 @@ class ElectricityPriceLevelSensor(SensorEntity):
         _LOGGER.debug("ElectricityPriceLevelSensor initialized for area %s, trigger: %s", self._nordpool_area_id, self._nordpool_trigger_entity_id)
 
     async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
+        """
+        Run when entity about to be added to Home Assistant.
+
+        This method sets up a listener for state changes of the
+        Nord Pool sensor that provides the raw electricity price.
+        It also triggers an initial refresh of the sensor state if
+        the Nord Pool sensor already has a valid state.
+        """
         await super().async_added_to_hass()
 
         if self._nordpool_trigger_entity_id:
@@ -113,7 +144,18 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
     @callback
     async def _handle_nordpool_trigger_update(self, event: Event) -> None:
-        """Handle state changes of the tracked Nordpool sensor."""
+        """
+        Handle state changes of the tracked Nordpool sensor.
+
+        This callback is triggered when the Nord Pool sensor, which this
+        sensor depends on, updates its state. If the new state is valid,
+        this method will refresh the ElectricityPriceLevelSensor's state.
+
+        Args:
+            event: The event object containing data about the state change.
+                   The new state of the Nord Pool sensor is expected in
+                   `event.data.get("new_state")`.
+        """
         new_state: State | None = event.data.get("new_state")
 
         if not new_state or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
@@ -130,7 +172,13 @@ class ElectricityPriceLevelSensor(SensorEntity):
         await self._refresh_sensor_state()
 
     async def _refresh_sensor_state(self) -> None:
-        """Refreshes the sensor's state based on current rates."""
+        """
+        Refreshes the sensor's state based on current rates.
+
+        This method updates the internal state values (_state, _cost, _level, etc.)
+        by calling `_update_sensor_state_from_current_rate` and then
+        schedules an update to Home Assistant to reflect these changes.
+        """
         self._update_sensor_state_from_current_rate()
         self._state = round(self._cost, 5)
         self.async_write_ha_state()
@@ -140,10 +188,23 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
     @property
     def state(self):
+        """
+        Return the state of the sensor.
+
+        The state represents the calculated cost of electricity per unit (e.g., kWh),
+        rounded to 5 decimal places.
+        """
         return self._state
 
     @property
     def extra_state_attributes(self):
+        """
+        Return the extra state attributes of the sensor.
+
+        These attributes provide detailed information related to the electricity price,
+        including spot price, cost, credit, unit, currency, price level, rank,
+        thresholds, and the full list of rates.
+        """
         return {
             "spot_price": self._spot_price,
             "cost": self._cost,
@@ -159,16 +220,31 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
     @property
     def unit_of_measurement(self):
+        """
+        Return the unit of measurement of the sensor.
+
+        Combines the currency and unit (e.g., "EUR/kWh").
+        Returns the base unit_of_measurement if currency or unit is not set.
+        """
         if self._currency and self._unit:
             return f"{self._currency}/{self._unit}"
         return self._unit_of_measurement
 
     @property
     def device_class(self):
+        """Return the device class of the sensor."""
         return self._device_class
 
     @property
     def icon(self):
+        """
+        Return the icon of the sensor based on the current price level.
+
+        - "mdi:arrow-expand-down" for "Low" level.
+        - "mdi:arrow-expand-up" for "High" level.
+        - "mdi:arrow-expand-vertical" for "Medium" level.
+        - Default icon if level is "Unknown" or not set.
+        """
         if self._level == "Low":
             return "mdi:arrow-expand-down"
         if self._level == "High":
@@ -178,6 +254,18 @@ class ElectricityPriceLevelSensor(SensorEntity):
         return self._icon
 
     def _update_sensor_state_from_current_rate(self) -> datetime.datetime | None:
+        """
+        Update sensor's state attributes from the current hourly rate.
+
+        This method iterates through the stored rates to find the one
+        that corresponds to the current time. If a current rate is found,
+        it updates the sensor's `_spot_price`, `_cost`, `_credit`, `_level`,
+        and `_rank` attributes. It also purges old rates from the `_rates` list.
+
+        Returns:
+            The end time of the current rate slot if a current rate is found,
+            otherwise None.
+        """
         current_rate_details = None
         current_rate_end_time_local = None
 
@@ -235,7 +323,19 @@ class ElectricityPriceLevelSensor(SensorEntity):
         return current_rate_end_time_local
 
     async def async_update_data(self, nordpool_data: dict):
-        """Process new Nordpool data and update sensor state."""
+        """
+        Process new Nordpool data and update sensor state.
+
+        This method is called when new data is available from the Nord Pool
+        coordinator. It parses the raw price entries, calculates costs,
+        credits, levels, and ranks for each hourly slot, and stores them.
+        Finally, it updates the sensor's current state based on this new data.
+
+        Args:
+            nordpool_data: A dictionary containing the new Nord Pool data.
+                           Expected keys include "currency" and "raw" (a list
+                           of price entries).
+        """
         _LOGGER.debug("async_update_data called with new Nordpool data: %s", json.dumps(nordpool_data, indent=2, default=str))
         try:
             self._unit = "kWh"
@@ -303,10 +403,33 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
 
     async def async_will_remove_from_hass(self) -> None:
+        """
+        Execute when entity is about to be removed from Home Assistant.
+
+        Performs cleanup tasks, such as logging the removal.
+        """
         _LOGGER.debug("Removing ElectricityPriceLevelSensor.")
         await super().async_will_remove_from_hass()
 
-    def _process_entry(self, entry_to_process, daily_ranked_list):
+    def _process_entry(self, entry_to_process: dict, daily_ranked_list: list[dict]):
+        """
+        Process a single price entry to calculate its cost, credit, level, and rank.
+
+        This method takes a single entry (representing an hour's price data)
+        and a list of all entries for that day (ranked by price). It calculates
+        the final cost and credit including all fees and taxes, determines the
+        price level (Low, Medium, High), and calculates a percentile rank
+        for the price within that day. The processed data is then appended
+        to the sensor's `_rates` list.
+
+        Args:
+            entry_to_process: A dictionary containing the price entry to process.
+                              Expected keys: "start" (datetime), "end" (datetime),
+                              "value" (float, spot price in main unit/kWh).
+            daily_ranked_list: A list of all price entries for the same day as
+                               `entry_to_process`, sorted by price value. This is
+                               used to determine the rank.
+        """
         start_local = entry_to_process["start"]
         end_local = entry_to_process["end"]
         spot_price_kwh_main_unit = entry_to_process["value"]
@@ -344,7 +467,22 @@ class ElectricityPriceLevelSensor(SensorEntity):
             "rank": rank_value
         })
 
-    def calculate_cost_and_credit(self, spot_price_main_unit_kwh: float):
+    def calculate_cost_and_credit(self, spot_price_main_unit_kwh: float) -> tuple[float, float]:
+        """
+        Calculate the total cost and credit per kWh based on the spot price and configured fees.
+
+        This method applies various fixed and variable fees (supplier, grid),
+        energy tax, and VAT to the spot price to determine the final cost.
+        It also calculates the potential credit based on configured credit rates.
+
+        Args:
+            spot_price_main_unit_kwh: The raw spot price in the main currency unit per kWh.
+
+        Returns:
+            A tuple containing:
+                - cost (float): The calculated total cost per kWh, rounded to 5 decimal places.
+                - credit (float): The calculated total credit per kWh, rounded to 5 decimal places.
+        """
         supplier_fixed_fee = float(self._supplier_fixed_fee)
         supplier_variable_fee_pct = float(self._supplier_variable_fee) / 100
         supplier_fixed_credit = float(self._supplier_fixed_credit)
@@ -372,6 +510,18 @@ class ElectricityPriceLevelSensor(SensorEntity):
         return round(cost, 5), round(credit, 5)
 
     def calculate_level(self, cost: float) -> str:
+        """
+        Determine the price level (Low, Medium, High) based on the calculated cost.
+
+        Compares the provided cost against the user-configured low and high
+        thresholds to categorize the price.
+
+        Args:
+            cost: The calculated cost of electricity per kWh.
+
+        Returns:
+            A string representing the price level: "Low", "Medium", or "High".
+        """
         cost_val = float(cost)
         low = float(self._low_threshold)
         high = float(self._high_threshold)
