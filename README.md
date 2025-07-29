@@ -2,35 +2,43 @@
 
 A custom component for Home Assistant that provides electricity price level sensors based on data from the Home Assistant NordPool integration. This integration helps you monitor and automate your home based on real-time and forecasted electricity prices, using the NordPool sensor as a data source.
 
-[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/klurige)
+This integration works particularly well with the [LevelIndicatorClock](https://github.com/Klurige/LevelIndicatorClock), allowing you to visualize price levels throughout the day in an analogue clock.
+
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/klurige)
+
+---
 
 ## Features
 - Uses electricity prices provided by the Home Assistant NordPool integration.
 - Categorizes prices into levels (e.g., low, medium, high).
 - Provides sensors for use in automations and dashboards.
 - Supports multiple languages (English, Swedish).
-
+- Easy configuration via UI or YAML.
+  - Adds support for extra fees and taxes from your grid and supplier.
+  - Allows for setting thresholds for low and high prices.
+  - Adds support for credits when exporting electricity.
+- Provides a ranking system for prices to help identify the best times to use electricity.
 ## Prerequisites
-- You must have the [NordPool integration](https://github.com/custom-components/nordpool) installed and configured in Home Assistant. This integration supplies the electricity price sensor that this component depends on.
+- Home Assistant (2025.0 or newer recommended)
+- [NordPool integration](https://www.home-assistant.io/integrations/nordpool/) installed and configured in Home Assistant. This integration supplies the electricity prices that this component depends on.
 
 ## Installation
 
-### Option 1: HACS
+### Option 1: HACS (Recommended)
 
-- Follow [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=custom-components&repository=electricitypricelevels&category=integration) and install it
-- Restart Home Assistant
+1. Open Home Assistant and go to HACS.
+2. Search for `electricitypricelevels` in Integrations.
+3. Install the integration.
+4. Restart Home Assistant.
 
-  *or*
-- Go to `HACS` -> `Integrations`,
-- Select `+`,
-- Search for `electricitypricelevels` and install it,
-- Restart Home Assistant
+Or use the direct link:
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=custom-components&repository=electricitypricelevels&category=integration)
 
 #### Add the integration via the Home Assistant UI
-- Go to `Settings` -> `Devices & Services`
-- Select `+ Add Integration`
-- Search for `electricitypricelevels` and select it
-- Fill in the name of your NordPool sensor and press `Submit`
+1. Go to `Settings` -> `Devices & Services`
+2. Select `+ Add Integration`
+3. Search for `electricitypricelevels` and select it
+4. Fill in the name of your NordPool sensor and press `Submit`
 
 ### Option 2: Manual
 1. Copy the `custom_components/electricitypricelevels` directory into your Home Assistant `custom_components` folder.
@@ -41,78 +49,96 @@ A custom component for Home Assistant that provides electricity price level sens
 You can configure the integration via the Home Assistant UI (recommended) or manually in `configuration.yaml`:
 
 ```yaml
-# Example configuration.yaml entry
-# (if manual configuration is supported)
+# Example configuration.yaml
 electricitypricelevels:
-  region: "SE3"
-  price_entity: "sensor.nordpool_kwh_se3_sek_3_10_0"
+  nordpool_area_id: "SE3"
+  low_threshold: 0.8
+  high_threshold: 1.5
+  supplier_note: "My supplier fees"
+  supplier_fixed_fee: 0.12
+  supplier_variable_fee: 0.05
+  supplier_fixed_credit: 0.00
+  supplier_variable_credit: 0.00
+  grid_note: "My grid fees"
+  grid_fixed_fee: 0.20
+  grid_variable_fee: 0.10
+  grid_fixed_credit: 0.00
+  grid_variable_credit: 0.00
+  grid_energy_tax: 0.45
+  electricity_vat: 0.25
 ```
 
-There are many extra fees and taxes that can be added to the price. These can be added in the
-configuration of the integration. The configuration can be found in the integration settings.
+There are many extra fees and taxes that can be added to the price. Suppliers and grid owners can have many different types of fees, which may vary by region or contract. You can specify the details of these fees in the `supplier_note` and `grid_note` fields, and add up the actual amounts in the corresponding fee fields. This allows you to document and sum up all relevant charges for your specific situation in the configuration.
 
 I have added to the configuration taxes and fees added by my grid and supplier. They are no doubt
 called differently for other grids and suppliers.
 
-| Key                      | Description              |
-|--------------------------|--------------------------|
-| `nordpool_area_id`     | Nord Pool Area id        |
-| `supplier_balancing_fee`   | Supplier balancing fee   |
-| `supplier_environment_fee` | Supplier environment fee |
-| `supplier_certificate_fee` | Supplier certificate fee |
-| `supplier_fixed_fee`     | Supplier fixed fee       |
-| `supplier_credit`        | Supplier credit          |
-| `grid_fixed_fee`         | Grid fixed fee           |
-| `grid_variable_fee`      | Grid variable fee        |
-| `grid_energy_tax`        | Grid energy tax          |
-| `electricity_vat`        | Electricity VAT          |
-| `grid_fixed_credit`      | Grid fixed credit        |
-| `grid_variable_credit`   | Grid variable credit     |
+| Key                        | Description                  | Example Value |
+|----------------------------|------------------------------|---------------|
+| `nordpool_area_id`         | Nord Pool Area id            | "SE3"        |
+| `low_threshold`            | Low price threshold          | 0.8           |
+| `high_threshold`           | High price threshold         | 1.5           |
+| `supplier_note`            | Supplier note                | "My supplier fees" |
+| `supplier_fixed_fee`       | Supplier fixed fee           | 0.12          |
+| `supplier_variable_fee`    | Supplier variable fee        | 0.05          |
+| `supplier_fixed_credit`    | Supplier fixed credit        | 0.00          |
+| `supplier_variable_credit` | Supplier variable credit     | 0.00          |
+| `grid_note`                | Grid note                    | "My grid fees" |
+| `grid_fixed_fee`           | Grid fixed fee               | 0.20          |
+| `grid_variable_fee`        | Grid variable fee            | 0.10          |
+| `grid_fixed_credit`        | Grid fixed credit            | 0.00          |
+| `grid_variable_credit`     | Grid variable credit         | 0.00          |
+| `grid_energy_tax`          | Grid energy tax              | 0.45          |
+| `electricity_vat`          | Electricity VAT              | 0.25          |
 
 ## Usage
-- The integration will create two sensors, `sensor.electricity_price` and `sensor.iso_formatted_time`.
-  - `sensor.electricity_price` provides the current electricity price with all fees and taxes included, and a list of all known upcoming prices. (Nordpool gets the next day prices around 14:00 CET)
-  - `sensor.iso_formatted_time` provides the current time in ISO 8601 format, and a string containing one character for each price level. ( Level clock pattern. See https://github.com/Klurige/LevelIndicatorClock)
+- The integration adds one sensor and one service, `sensor.electricitypricelevels` and `electricitypricelevels.get_levels`.
+  - `sensor.electricitypricelevels` provides the current electricity price with all fees and taxes included, and a list of all known upcoming prices. (Nordpool gets the next day prices around 14:00 CET)
+  - `electricitypricelevels.get_levels` provides a string containing one character for each price level. ( Level clock pattern. See https://github.com/Klurige/LevelIndicatorClock)
 - Use these sensors in automations to optimize energy usage (e.g., run appliances when prices are low).
 
-### `sensor.electricity_price`
+### `sensor.electricitypricelevels`
 - **Description:** The current electricity price, including all configured fees and taxes.
 - **State:** The numeric value of the current price.
 - **Attributes:**
-  - `spot_price`: The base price from the NordPool sensor (before fees/taxes).
+  - `spot_price`: The raw price from the NordPool sensor (before fees/taxes).
   - `cost`: The total cost including all fees and taxes.
   - `credit`: The total credit received when exporting electricity.
-  - `unit`: The unit for the electricity power. Typically `kWh`.
-  - `currency`: The currency of the price, for example `SEK` or `EUR`.
+  - `unit`: The unit for the electricity power. Typically `kWh`. Sourced from the NordPool sensor.
+  - `currency`: The currency of the price, for example `SEK` or `EUR`. Sourced from the NordPool sensor.
   - `level`: Current price level as a string (`Low`, `Medium`, `High`).
   - `rank`: The current rank of the price compared to other prices for the current day. See the [Ranking](#ranking) section for details.
-  - `low_threshold`: The threshold for low prices.
-  - `high_threshold`: The threshold for high prices.
+  - `low_threshold`: The threshold cost for low prices.
+  - `high_threshold`: The threshold cost for high prices.
   - `rates`: A list of today's (and possibly tomorrow's) prices, each with:
     - `start`: The start time of the price period.
     - `end`: The end time of the price period. 1us before the next period starts.
-    - `spot_price`: The base price from the NordPool sensor for that period.
-    - `cost`: The total cost for that period, including all fees and taxes.
-    - `credit`: The total credit for that period, if applicable.
-    - `level`: The price level for that period.
-    - `rank`: The rank of the price for that period compared to other prices for the current day.
+    - `spot_price`: The raw price from the NordPool sensor for the period.
+    - `cost`: The total cost for the period, including all fees and taxes.
+    - `credit`: The total credit for the period, if applicable.
+    - `level`: The price level for the period.
+    - `rank`: The rank of the price for the period compared to other prices for the current day.
 - **Update Frequency:** Updated every time a new price slot is entered. (See the NordPool integration for details on update frequency.)
 
-### `sensor.iso_formatted_time`
-- **Description:** The current time in ISO 8601 format. Useful for advanced automations and templating. Main purpose is to provide data for the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock)
-- **State:** The current time as a string (e.g., `2025-06-03T14:00:00+02:00`).
-- **Attributes:**
-  - `level_clock_pattern`: A string representing the current price level pattern, where each character corresponds to a price level for today and tomorrow. Each character represents 12 minutes, with:
+### `electricitypricelevels.get_levels`
+- **Description:** The price levels for today and tomorrow as a string with one char per time period. Main purpose is to provide data for the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock)
+- **Input parameters:**
+  - `level_length`: The length of each level in minutes. Default is the length of the NordPool price periods, which is one hour, but soon to change to 15 minutes.
+- **Output:**
+  - `level_length`: The length of each level in minutes.
+  - `levels`: A string representing the current price level pattern, where each character corresponds to a price level for today and tomorrow. Each character represents a level_length slot in minutes, with:
     - `L` for Low
     - `M` for Medium
     - `H` for High
     - `U` for Unknown (if no price is available for that period)
-    - `S` for selling (exporting). To be implemented.
     - `E` for internal error.
-- **Update Frequency:** Updated every minute.
+    - `low_threshold`: The threshold cost for low prices.
+    - `high_threshold`: The threshold cost for high prices.
+  
+The level for a time period is determined by checking the `cost` attribute of the price for that period against the configured thresholds. The whole time period must be below a threshold to get that level.
 
 ## Ranking
-The `sensor.electricity_price` sensor provides a `rank` attribute that indicates the current price's rank compared to other prices for the current day. The rank is calculated on the price level of the current price.
+The `sensor.electricitypricelevels` sensor provides a `rank` attribute that indicates the current price's rank compared to other prices for the current day. The rank is calculated on the price level of the current price.
 - `1` is the lowest price for the day.
 - `100` is the highest price for the day.
 
@@ -257,9 +283,10 @@ card:
         extremas: true
 ```
 
-
-## Contributing
-Contributions are welcome! Please open issues or pull requests on GitHub.
+## Troubleshooting
+- Ensure the NordPool integration is working and provides price data.
+- Restart Home Assistant after installation or configuration changes.
+- Check logs for errors related to `electricitypricelevels`.
 
 ### Debug logging
 Add this to your `configuration.yaml` and restart Home Assistant to debug the component.
@@ -273,5 +300,14 @@ logger:
     custom_components.electricitypricelevels.util: debug
 ```
 
+## Contributing
+Contributions are welcome! Please open issues or pull requests on GitHub.
+
 ## License
-GPL https://www.gnu.org/licenses/gpl-3.0.txt
+
+This project is licensed under the GNU General Public License (GPL). See the [LICENSE](LICENSE) file for details.
+
+## Say Thanks
+If you like this project, please consider supporting me.
+
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/klurige)

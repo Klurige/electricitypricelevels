@@ -11,10 +11,10 @@
         "description": "Elhandelsavgifter och intäkter.",
         "data": {
           "supplier_note": "Noteringar om elhandelsavgifter och intäkter.",
-          "supplier_fixed_fee": "Elhandelsavgift per enhet",
-          "supplier_variable_fee": "Elhandelsavgift i procent",
-          "supplier_fixed_credit": "Elhandelsintäkt per enhet",
-          "supplier_variable_credit": "Elhandelsintäkt i procent"
+          "supplier_fixed_fee": "Elhandelspåslag per enhet vid import",
+          "supplier_variable_fee": "Elhandelspåslag i procent vid import",
+          "supplier_fixed_credit": "Elhandelsavdrag per enhet vid export",
+          "supplier_variable_credit": "Elhandelsavdrag i procent vid export"
         }
       },
       "grid_fees_and_credits": {

@@ -1,0 +1,21 @@
+get_levels:
+    description: Get electricity price levels for today and tomorrow.
+    fields:
+        level_length:
+            selector:
+                number:
+                    min: 0
+                    max: 1440
+                    step: 1
+                    mode: box
+                    unit_of_measurement: minutes
+            description: Length in minutes for each level. 0 means same as NordPool.
+    result:
+        type: object
+        properties:
+            level_length:
+                type: integer
+                description: The length in minutes for each level. 0 means same as NordPool.
+            levels:
+                type: string
+                description: String with one char per level.

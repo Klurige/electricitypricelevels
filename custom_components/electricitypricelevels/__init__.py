@@ -5,10 +5,17 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-
+from .services import async_setup_services
+from homeassistant.helpers.typing import ConfigType
 
 PLATFORMS = [Platform.SENSOR]
 
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the Nord Pool service."""
+
+    async_setup_services(hass)
+    return True
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry

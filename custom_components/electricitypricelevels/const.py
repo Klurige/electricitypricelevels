@@ -22,4 +22,3 @@ CONF_GRID_FIXED_CREDIT = "grid_fixed_credit"
 CONF_GRID_VARIABLE_CREDIT = "grid_variable_credit"
 CONF_GRID_ENERGY_TAX = "grid_energy_tax"
 CONF_ELECTRICITY_VAT = "electricity_vat"
-
