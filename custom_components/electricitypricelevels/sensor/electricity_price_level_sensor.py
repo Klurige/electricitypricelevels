@@ -88,8 +88,8 @@ class ElectricityPriceLevelSensor(SensorEntity):
         self._electricity_vat = entry.options.get(CONF_ELECTRICITY_VAT, 0.0) or 0.0
 
         description = SensorEntityDescription(
-            key="electricity_price",
-            translation_key="electricity_price",
+            key="electricitypricelevels",
+            translation_key="electricitypricelevels",
         )
         self.entity_description = description
         self.entity_id = f"{SENSOR_DOMAIN}.{description.key}"
@@ -183,7 +183,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
         self._state = round(self._cost, 5)
         self.async_write_ha_state()
         _LOGGER.info(
-            f"Sensor state refreshed: Cost={self._state} {self._currency}/{self._unit}, Level={self._level}, RawSpot={self._spot_price}, Rank={self._rank}/100"
+            f"Sensor state refreshed: Cost={self._state} {self._currency}/{self._unit}, Level={self._level}, RawSpot={self._spot_price}, Rank={self._rank}"
         )
 
     @property
@@ -310,7 +310,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
             current_rate_end_time_local = current_rate_details["end"]
             _LOGGER.debug(
-                f"Sensor state updated from current_rate: spot_price={self._spot_price}, cost={self._cost}, level={self._level}, rank={self._rank}/100. Slot ends at {current_rate_end_time_local}"
+                f"Sensor state updated from current_rate: spot_price={self._spot_price}, cost={self._cost}, level={self._level}, rank={self._rank}. Slot ends at {current_rate_end_time_local}"
             )
         else:
             _LOGGER.warning("No current rate found in self._rates for the current time. Sensor state will be 'Unknown'.")
@@ -396,7 +396,10 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
         self._update_sensor_state_from_current_rate()
         self._state = round(self._cost, 5)
-        self.async_write_ha_state()
+        if self.hass is not None:
+            self.async_write_ha_state()
+        else:
+            _LOGGER.warning("async_write_ha_state called but self.hass is None. Skipping state update.")
         _LOGGER.info(
             f"Sensor state updated via async_update_data: Cost={self._state} {self._currency}/{self._unit}, Level={self._level}, RawSpot={self._spot_price}, Rank={self._rank}/100"
         )
@@ -418,7 +421,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
         This method takes a single entry (representing an hour's price data)
         and a list of all entries for that day (ranked by price). It calculates
         the final cost and credit including all fees and taxes, determines the
-        price level (Low, Medium, High), and calculates a percentile rank
+        price level (Low, Medium, High), and calculates a minute rank
         for the price within that day. The processed data is then appended
         to the sensor's `_rates` list.
 
@@ -444,13 +447,13 @@ class ElectricityPriceLevelSensor(SensorEntity):
             if num_entries_today == 0:
                 pass
             else:
-                current_0_indexed_rank = next(i for i, ranked_entry in enumerate(daily_ranked_list) if ranked_entry["start"] == start_local and ranked_entry["value"] == spot_price_kwh_main_unit)
+                rank_index = next(i for i, ranked_entry in enumerate(daily_ranked_list) if ranked_entry["start"] == start_local and ranked_entry["value"] == spot_price_kwh_main_unit)
 
                 if num_entries_today == 1:
-                    rank_value = 1
+                    rank_value = 0
                 else:
-                    rank_value = math.floor((current_0_indexed_rank / (num_entries_today - 1)) * 99) + 1
-
+                    entry_length = 1440 /num_entries_today
+                    rank_value = rank_index * entry_length
         except StopIteration:
             _LOGGER.warning(f"Could not determine rank for entry starting at {start_local} with value {spot_price_kwh_main_unit}. Appending with rank 'N/A'.")
         except Exception as e:
@@ -532,4 +535,3 @@ class ElectricityPriceLevelSensor(SensorEntity):
         if cost_val > high:
             return "High"
         return "Medium"
-

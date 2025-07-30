@@ -72,7 +72,7 @@
       "iso_formatted_time": {
         "name": "Time in ISO format"
       },
-      "electricity_price": {
+      "electricitypricelevels": {
         "name": "Current price"
       },
       "electricity_level": {

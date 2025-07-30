@@ -72,7 +72,7 @@
       "iso_formatted_time": {
         "name": "ISO-formaterad tid"
       },
-      "electricity_price": {
+      "electricitypricelevels": {
         "name": "Pris nu"
       },
       "electricity_level": {

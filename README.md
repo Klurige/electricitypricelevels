@@ -138,11 +138,11 @@ called differently for other grids and suppliers.
 The level for a time period is determined by checking the `cost` attribute of the price for that period against the configured thresholds. The whole time period must be below a threshold to get that level.
 
 ## Ranking
-The `sensor.electricitypricelevels` sensor provides a `rank` attribute that indicates the current price's rank compared to other prices for the current day. The rank is calculated on the price level of the current price.
-- `1` is the lowest price for the day.
-- `100` is the highest price for the day.
+The `sensor.electricitypricelevels` sensor provides a `rank` attribute that indicates the current price's rank compared to other prices for the current day. The rank is expressed in minutes, starting at 0. A full day is 1440 minutes (0-1439).
+- `0` is the lowest price minute for the day.
+- `1439` is the highest price minute for the day.
 
-For example, to find the three cheapest hours of the day, the rank should be lower than 13. 3/24 hours in a day, so 3 cheapest hours is 3/24 * 100 = 12.5, rounded up to 13.
+For example, to find the three cheapest hours of the day, look for ranks between 0 and 179. (3 hours × 60 minutes = 180 minutes, so ranks 0–179).
 Note that this will find non-consecutive time slots.
 
 #### Notes
@@ -157,10 +157,10 @@ Also needed is the ´config-template-card´.
 ```yaml
 type: custom:config-template-card
 variables:
-  thresholdLow: states["sensor.electricity_price"].attributes.low_threshold
-  thresholdHigh: states["sensor.electricity_price"].attributes.high_threshold
+  thresholdLow: states["sensor.electricitypricelevels"].attributes.low_threshold
+  thresholdHigh: states["sensor.electricitypricelevels"].attributes.high_threshold
 entities:
-  - sensor.electricity_price
+  - sensor.electricitypricelevels
 card:
   type: custom:apexcharts-card
   graph_span: 48h
@@ -169,7 +169,7 @@ card:
   experimental:
     color_threshold: true
   series:
-    - entity: sensor.electricity_price
+    - entity: sensor.electricitypricelevels
       name: Electricity Price
       type: column
       color: green
@@ -193,14 +193,14 @@ Or if you prefer one graph for today and one for tomorrow (These graphs also set
 ```yaml
 type: custom:config-template-card
 variables:
-  thresholdLow: states["sensor.electricity_price"].attributes.low_threshold
-  thresholdHigh: states["sensor.electricity_price"].attributes.high_threshold
+  thresholdLow: states["sensor.electricitypricelevels"].attributes.low_threshold
+  thresholdHigh: states["sensor.electricitypricelevels"].attributes.high_threshold
 entities:
-  - sensor.electricity_price
+  - sensor.electricitypricelevels
 card:
   type: custom:apexcharts-card
   header:
-    title: Elpriser idag
+    title: Prices today
     show: true
     show_states: true
   graph_span: 24h
@@ -216,8 +216,8 @@ card:
       min: 0
       max: 7
   series:
-    - entity: sensor.electricity_price
-      name: Köp
+    - entity: sensor.electricitypricelevels
+      name: Import
       type: column
       color: green
       float_precision: 2
@@ -241,14 +241,14 @@ card:
 ```yaml
 type: custom:config-template-card
 variables:
-  thresholdLow: states["sensor.electricity_price"].attributes.low_threshold
-  thresholdHigh: states["sensor.electricity_price"].attributes.high_threshold
+  thresholdLow: states["sensor.electricitypricelevels"].attributes.low_threshold
+  thresholdHigh: states["sensor.electricitypricelevels"].attributes.high_threshold
 entities:
-  - sensor.electricity_price
+  - sensor.electricitypricelevels
 card:
   type: custom:apexcharts-card
   header:
-    title: Elpriser imorgon
+    title: Prices tomorrow
     show: true
     show_states: true
   graph_span: 24h
@@ -262,8 +262,8 @@ card:
       min: 0
       max: 7
   series:
-    - entity: sensor.electricity_price
-      name: Köp
+    - entity: sensor.electricitypricelevels
+      name: Import
       type: column
       color: green
       float_precision: 2
@@ -295,7 +295,7 @@ Add this to your `configuration.yaml` and restart Home Assistant to debug the co
 logger:
   default: info
   logs:
-    custom_components.electricitypricelevels.sensor.electricity_price_level_sensor: info
+    custom_components.electricitypricelevels.sensor.electricitypricelevels: info
     custom_components.electricitypricelevels.sensor.time_sensor: info
     custom_components.electricitypricelevels.util: debug
 ```
