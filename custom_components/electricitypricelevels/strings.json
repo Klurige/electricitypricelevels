@@ -69,14 +69,8 @@
   },
   "entity": {
     "sensor": {
-      "iso_formatted_time": {
-        "name": "Time in ISO format"
-      },
       "electricitypricelevels": {
         "name": "Current price"
-      },
-      "electricity_level": {
-        "name": "Current level"
       }
     }
   },

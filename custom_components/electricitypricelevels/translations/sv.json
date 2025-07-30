@@ -69,14 +69,8 @@
   },
   "entity": {
     "sensor": {
-      "iso_formatted_time": {
-        "name": "ISO-formaterad tid"
-      },
       "electricitypricelevels": {
         "name": "Pris nu"
-      },
-      "electricity_level": {
-        "name": "Nivå nu"
       }
     }
   },

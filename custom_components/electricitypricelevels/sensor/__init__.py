@@ -15,7 +15,6 @@ from homeassistant.helpers.translation import async_get_translations
 
 # Import your sensor classes
 from .electricity_price_level_sensor import ElectricityPriceLevelSensor
-from .time_sensor import TimeSensor
 from .nordpool_coordinator import NordpoolDataCoordinator
 
 from ..const import DOMAIN
@@ -44,9 +43,8 @@ async def async_setup_entry(
     )
 
     level_sensor = ElectricityPriceLevelSensor(hass, entry, device_info)
-    iso_time_sensor = TimeSensor(hass, entry, device_info, level_sensor)
 
-    async_add_entities([level_sensor, iso_time_sensor], True)
+    async_add_entities([level_sensor], True)
 
     nordpool_config_entry_id_to_use = None
     for cfg_entry in hass.config_entries.async_entries("nordpool"):
