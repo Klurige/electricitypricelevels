@@ -10,12 +10,3 @@ get_levels:
                     mode: box
                     unit_of_measurement: minutes
             description: Length in minutes for each level. 0 means same as NordPool.
-    result:
-        type: object
-        properties:
-            level_length:
-                type: integer
-                description: The length in minutes for each level. 0 means same as NordPool.
-            levels:
-                type: string
-                description: String with one char per level.
