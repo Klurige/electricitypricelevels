@@ -11,9 +11,6 @@ from homeassistant.helpers import config_validation as cv
 
 PLATFORMS = [Platform.SENSOR]
 
-CONFIG_SCHEMA = cv.config_entry_only_config_schema
-
-
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Nord Pool service."""
 
