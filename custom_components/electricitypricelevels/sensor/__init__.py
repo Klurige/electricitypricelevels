@@ -14,7 +14,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.translation import async_get_translations
 
 # Import your sensor classes
-from .electricity_price_level_sensor import ElectricityPriceLevelSensor
+from .electricitypricelevels import ElectricityPriceLevelSensor
 from .nordpool_coordinator import NordpoolDataCoordinator
 
 from ..const import DOMAIN
