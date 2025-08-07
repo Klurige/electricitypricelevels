@@ -28,6 +28,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
 )
+from homeassistant.helpers.entity import EntityCategory
 
 from ..const import (
     CONF_NORDPOOL_AREA_ID,
@@ -535,3 +536,4 @@ class ElectricityPriceLevelSensor(SensorEntity):
         if cost_val > high:
             return "High"
         return "Medium"
+
