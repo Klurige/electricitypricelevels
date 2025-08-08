@@ -229,28 +229,27 @@ class NordpoolDataCoordinator:
         elif not tomorrows_data_is_now_ok:
             # Today's data is OK, but tomorrow's is not.
             _LOGGER.info(f"Today's data for {current_hass_date} is OK. Next day's data ({expected_tomorrows_date}) is missing or stale ({self._date_of_next_data if self._date_of_next_data else 'None'}).")
-            time_14h00 = hass_now.replace(hour=14, minute=0, second=0, microsecond=0)
-            time_13h55 = hass_now.replace(hour=13, minute=55, second=0, microsecond=0)
+            time_13h00 = hass_now.replace(hour=13, minute=0, second=0, microsecond=0)
 
-            # If we just successfully fetched TODAY's data, and it's 14:00 or later,
+            # If we just successfully fetched TODAY's data, and it's 13:00 or later,
             # schedule an almost immediate attempt for TOMORROW's data.
-            if current_operation_type == "TODAY" and call_status == "SUCCESS_DATA" and todays_data_is_now_ok and hass_now >= time_14h00:
+            if current_operation_type == "TODAY" and call_status == "SUCCESS_DATA" and todays_data_is_now_ok and hass_now >= time_13h00:
                 next_delay_seconds = 0.1 # Almost immediate
-                new_log_state_name = f"TODAY_OK_IMMEDIATE_FETCH_TOMORROW_POST_14H (last_op_today_status: {call_status})"
-            elif hass_now >= time_13h55:
-                # Actively retry for tomorrow's data every 15 seconds if it's after 13:55.
-                next_delay_seconds = 15
-                new_log_state_name = f"RETRYING_TOMORROW_DATA_ACTIVE_IN_15S (last_fetch_status: {call_status}, op_attempted: {current_operation_type})"
-            else: # Before 13:55, wait until 13:55 to start fetching tomorrow's data.
-                next_run_time_target = time_13h55
+                new_log_state_name = f"TODAY_OK_IMMEDIATE_FETCH_TOMORROW_POST_13H (last_op_today_status: {call_status})"
+            elif hass_now >= time_13h00:
+                # Actively retry for tomorrow's data every 120 seconds if it's after 13:00.
+                next_delay_seconds = 120
+                new_log_state_name = f"RETRYING_TOMORROW_DATA_ACTIVE_IN_120S (last_fetch_status: {call_status}, op_attempted: {current_operation_type})"
+            else: # Before 13:00, wait until 13:00 to start fetching tomorrow's data.
+                next_run_time_target = time_13h00
                 next_delay_seconds = max(0.1, (next_run_time_target - hass_now).total_seconds())
-                new_log_state_name = f"WAIT_UNTIL_13:55_FOR_TOMORROW (last_fetch_status: {call_status}, op_attempted: {current_operation_type})"
+                new_log_state_name = f"WAIT_UNTIL_13:00_FOR_TOMORROW (last_fetch_status: {call_status}, op_attempted: {current_operation_type})"
         else:
             # Both today's and tomorrow's data are OK and up-to-date.
             _LOGGER.info(f"Data for today ({current_hass_date}) and tomorrow ({expected_tomorrows_date}) are up-to-date.")
-            next_day_13h55 = (hass_now + timedelta(days=1)).replace(hour=13, minute=55, second=0, microsecond=0)
-            next_delay_seconds = max(0.1, (next_day_13h55 - hass_now).total_seconds())
-            new_log_state_name = "DAILY_SCHEDULE_NEXT_CHECK_TOMORROW_13:55"
+            next_day_13h00 = (hass_now + timedelta(days=1)).replace(hour=13, minute=0, second=0, microsecond=0)
+            next_delay_seconds = max(0.1, (next_day_13h00 - hass_now).total_seconds())
+            new_log_state_name = "DAILY_SCHEDULE_NEXT_CHECK_TOMORROW_13:00"
 
         if target_fetch_date and call_status not in ("SUCCESS_DATA", "SUCCESS_NO_DATA", "ERROR_OTHER", "ERROR_SERVICE_NOT_READY", "ERROR_MISSING_CURRENCY", "ERROR_BAD_RESPONSE_STRUCTURE", "NOT_ATTEMPTED"):
             _LOGGER.error(f"Unhandled call_status: {call_status} for {target_fetch_date}. Fallback retry in 5 mins.")
@@ -324,5 +323,4 @@ class NordpoolDataCoordinator:
         else:
             _LOGGER.info("Nordpool data coordinator stopped. No active task to cancel.")
         self._current_schedule_state[0] = "STOPPED"
-
 
