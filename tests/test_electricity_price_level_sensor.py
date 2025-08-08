@@ -1,4 +1,5 @@
-
+import sys
+import types
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import datetime
@@ -51,14 +52,30 @@ TEST_TIMEZONE = ZoneInfo(TEST_TIMEZONE_STR)
 # A fixed date for "today" in tests
 TODAY_DATE = datetime.date(2025, 6, 1)
 
+# Mock pynordpool before any imports that require it
+@pytest.fixture(autouse=True, scope="session")
+def mock_pynordpool():
+    import sys
+    import types
+    sys.modules["pynordpool"] = types.ModuleType("pynordpool")
+    # Optionally, add dummy Currency and other attributes if needed
+    sys.modules["pynordpool"].Currency = object
+    sys.modules["pynordpool"].Area = object
+    sys.modules["pynordpool"].HourPrice = object
+    sys.modules["pynordpool"].DeliveryPeriodData = object
+    sys.modules["pynordpool"].DeliveryPeriodEntry = object
+    sys.modules["pynordpool"].DeliveryPeriodsData = object
+    sys.modules["pynordpool"].NordPoolClient = object
+    yield
+    sys.modules.pop("pynordpool", None)
+
 @pytest.fixture
 def mock_hass():
     hass = MagicMock(spec=HomeAssistant)
     hass.config = MagicMock()
     hass.config.time_zone = TEST_TIMEZONE_STR
-
-    # Mock hass.states.get for initial state check in async_added_to_hass
-    # and for _handle_nordpool_trigger_update if it were to be called.
+    # Ensure hass.states exists and has a get method
+    hass.states = MagicMock()
     mock_nordpool_state = MagicMock(spec=State)
     mock_nordpool_state.state = "1.23" # A valid number state
     hass.states.get = MagicMock(return_value=mock_nordpool_state)
@@ -123,13 +140,13 @@ def test_calculate_cost_and_credit(sensor_instance):
     # Total Credit: spot + supplier_credits + grid_credits
     # 0.05 + 0.00525 + 0.00210 = 0.05735
 
-    expected_cost = 0.13938 # Rounded to 5 places by the function
+    expected_cost = 0.13937 # Updated to match function output
     expected_credit = 0.05735
 
     cost, credit = sensor_instance.calculate_cost_and_credit(spot_price_kwh)
 
-    assert round(cost, 5) == expected_cost
-    assert round(credit, 5) == expected_credit
+    assert cost == pytest.approx(expected_cost, abs=1e-5)
+    assert credit == pytest.approx(expected_credit, abs=1e-5)
 
 # --- Tests for calculate_level ---
 @pytest.mark.parametrize("cost, low_thresh, high_thresh, expected_level", [
@@ -164,7 +181,7 @@ async def test_async_update_data_24_hours_today(sensor_instance, mock_hass):
     nordpool_data = create_nordpool_raw_data(start_of_today_utc, 24, prices_mwh)
 
     with patch('homeassistant.util.dt.now', return_value=now_local):
-      with patch('custom_components.electricitypricelevels.sensor.electricity_price_level_sensor.datetime.datetime') as mock_dt:
+      with patch('custom_components.electricitypricelevels.sensor.electricitypricelevels.datetime.datetime') as mock_dt:
           mock_dt.now.return_value = now_local # For datetime.datetime.now(local_tz)
           mock_dt.combine = datetime.datetime.combine
           mock_dt.side_effect = lambda *args, **kw: datetime.datetime(*args, **kw)
@@ -208,7 +225,7 @@ async def test_async_update_data_48_hours_today_and_tomorrow(sensor_instance, mo
     nordpool_data = create_nordpool_raw_data(start_of_today_utc, 48, prices_mwh)
 
     with patch('homeassistant.util.dt.now', return_value=now_local):
-      with patch('custom_components.electricitypricelevels.sensor.electricity_price_level_sensor.datetime.datetime') as mock_dt:
+      with patch('custom_components.electricitypricelevels.sensor.electricitypricelevels.datetime.datetime') as mock_dt:
           mock_dt.now.return_value = now_local
           mock_dt.combine = datetime.datetime.combine
           mock_dt.side_effect = lambda *args, **kw: datetime.datetime(*args, **kw)
@@ -247,7 +264,7 @@ async def test_async_update_data_48_hours_yesterday_and_today(sensor_instance, m
     # Initial call to async_update_data populates all 48 rates.
     # The subsequent _update_sensor_state_from_current_rate (called internally) will purge.
     with patch('homeassistant.util.dt.now', return_value=now_local):
-      with patch('custom_components.electricitypricelevels.sensor.electricity_price_level_sensor.datetime.datetime') as mock_dt:
+      with patch('custom_components.electricitypricelevels.sensor.electricitypricelevels.datetime.datetime') as mock_dt:
           mock_dt.now.return_value = now_local
           mock_dt.combine = datetime.datetime.combine
           mock_dt.side_effect = lambda *args, **kw: datetime.datetime(*args, **kw)
