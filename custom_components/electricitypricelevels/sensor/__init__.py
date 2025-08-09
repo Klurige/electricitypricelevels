@@ -15,7 +15,7 @@ from homeassistant.helpers.translation import async_get_translations
 
 # Import your sensor classes
 from .electricitypricelevels import ElectricityPriceLevelSensor
-from .levels_sensor import LevelsSensor
+from .levels_array import LevelsSensor
 from .nordpool_coordinator import NordpoolDataCoordinator
 
 from ..const import DOMAIN
