@@ -74,6 +74,8 @@ def mock_hass():
     hass = MagicMock(spec=HomeAssistant)
     hass.config = MagicMock()
     hass.config.time_zone = TEST_TIMEZONE_STR
+    hass.data = {}  # Add the data attribute
+    hass.bus = MagicMock()  # Add the bus attribute
     # Ensure hass.states exists and has a get method
     hass.states = MagicMock()
     mock_nordpool_state = MagicMock(spec=State)
@@ -95,6 +97,7 @@ def mock_device_info():
 @pytest.fixture
 def sensor_instance(mock_hass, mock_config_entry, mock_device_info):
     sensor = ElectricityPriceLevelSensor(mock_hass, mock_config_entry, mock_device_info)
+    sensor.hass = mock_hass  # Manually assign hass to the instance for testing
     sensor.async_write_ha_state = AsyncMock() # Crucial mock
     # Prevent actual listener setup during tests not focused on it
     sensor.async_on_remove = MagicMock()
@@ -296,3 +299,111 @@ async def test_async_update_data_48_hours_yesterday_and_today(sensor_instance, m
     for rate in sensor_instance._rates:
         assert rate["start"].astimezone(TEST_TIMEZONE).date() == TODAY_DATE
 
+
+# --- Tests for lifecycle and edge cases ---
+
+@pytest.mark.asyncio
+async def test_async_added_to_hass_no_initial_state(sensor_instance, mock_hass):
+    """Test async_added_to_hass when the tracked sensor has no state yet."""
+    mock_hass.states.get.return_value = None
+    sensor_instance._refresh_sensor_state = AsyncMock()
+
+    await sensor_instance.async_added_to_hass()
+
+    # The listener should be set up
+    sensor_instance.async_on_remove.assert_called_once()
+    # But refresh should not be called as there's no initial state
+    sensor_instance._refresh_sensor_state.assert_not_called()
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_state_value", [STATE_UNAVAILABLE, STATE_UNKNOWN])
+async def test_handle_nordpool_trigger_update_with_bad_state(sensor_instance, bad_state_value):
+    """Test that the sensor doesn't update when the source becomes unavailable or unknown."""
+    event = MagicMock()
+    event.data = {"new_state": State("sensor.nord_pool_fi_current_price", bad_state_value)}
+    sensor_instance._refresh_sensor_state = AsyncMock()
+
+    await sensor_instance._handle_nordpool_trigger_update(event)
+
+    sensor_instance._refresh_sensor_state.assert_not_called()
+
+@pytest.mark.parametrize("level, expected_icon", [
+    ("Low", "mdi:arrow-expand-down"),
+    ("High", "mdi:arrow-expand-up"),
+    ("Medium", "mdi:arrow-expand-vertical"),
+    ("Unknown", "mdi:flash"),
+    (None, "mdi:flash"),
+])
+def test_icon_property(sensor_instance, level, expected_icon):
+    """Test the icon property for all possible levels."""
+    sensor_instance._level = level
+    assert sensor_instance.icon == expected_icon
+
+def test_unit_of_measurement_property(sensor_instance):
+    """Test the unit_of_measurement property under different conditions."""
+    # Normal case
+    sensor_instance._currency = "EUR"
+    sensor_instance._unit = "kWh"
+    assert sensor_instance.unit_of_measurement == "EUR/kWh"
+
+    # Missing currency
+    sensor_instance._currency = None
+    sensor_instance._unit = "kWh"
+    sensor_instance._unit_of_measurement = "default/kWh"
+    assert sensor_instance.unit_of_measurement == "default/kWh"
+
+    # Missing unit
+    sensor_instance._currency = "SEK"
+    sensor_instance._unit = None
+    sensor_instance._unit_of_measurement = "default/SEK"
+    assert sensor_instance.unit_of_measurement == "default/SEK"
+
+@pytest.mark.asyncio
+async def test_update_with_no_current_rate_data(sensor_instance, mock_hass):
+    """Test sensor state when _rates is populated but no rate matches current time."""
+    # Mock "now" to be 10:30 AM on TODAY_DATE
+    now_local = datetime.datetime.combine(TODAY_DATE, datetime.time(10, 30), tzinfo=TEST_TIMEZONE)
+
+    # Create data for TOMORROW
+    tomorrow_date = TODAY_DATE + datetime.timedelta(days=1)
+    start_of_tomorrow_utc = datetime.datetime.combine(tomorrow_date, datetime.time.min, tzinfo=TEST_TIMEZONE).astimezone(datetime.timezone.utc)
+    nordpool_data = create_nordpool_raw_data(start_of_tomorrow_utc, 24, [10]*24)
+
+    with patch('homeassistant.util.dt.now', return_value=now_local):
+        with patch('custom_components.electricitypricelevels.sensor.electricitypricelevels.datetime.datetime') as mock_dt:
+            mock_dt.now.return_value = now_local
+            mock_dt.combine = datetime.datetime.combine
+            mock_dt.side_effect = lambda *args, **kw: datetime.datetime(*args, **kw)
+
+            # First, update with tomorrow's data. This will populate _rates.
+            await sensor_instance.async_update_data(nordpool_data)
+
+    # After the update, because "now" is today, no current rate should be found.
+    # The internal call to _update_sensor_state_from_current_rate should have set state to Unknown.
+    assert sensor_instance._level == "Unknown"
+    assert sensor_instance._cost == 0.0
+    assert sensor_instance._spot_price == 0.0
+    assert sensor_instance.state == 0.0
+
+@pytest.mark.asyncio
+async def test_async_update_data_with_malformed_data(sensor_instance):
+    """Test that malformed data is handled gracefully."""
+    # Malformed data (e.g., missing 'raw' key)
+    malformed_nordpool_data = {"currency": "EUR"}
+
+    await sensor_instance.async_update_data(malformed_nordpool_data)
+
+    # The sensor should not crash and should be in a reasonable state
+    assert len(sensor_instance._rates) == 0
+    assert sensor_instance._level == "Unknown" # It becomes Unknown because no rates are found
+    assert sensor_instance.state == 0.0
+
+    # Test with another type of malformed data
+    malformed_nordpool_data_2 = {"currency": "EUR", "raw": [{"start": "bad-time", "end": None, "price": 10}]}
+    with patch("custom_components.electricitypricelevels.sensor.electricitypricelevels._LOGGER") as mock_logger:
+        await sensor_instance.async_update_data(malformed_nordpool_data_2)
+        mock_logger.error.assert_called_once()
+        assert sensor_instance._level == "Error Processing Data"
+        assert sensor_instance.state == 0.0
+        # Ensure async_write_ha_state was called
+        sensor_instance.async_write_ha_state.assert_called()

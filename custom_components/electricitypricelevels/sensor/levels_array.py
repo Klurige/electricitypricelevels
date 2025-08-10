@@ -25,7 +25,7 @@ class LevelsSensor(SensorEntity):
     _attr_visible = False  # Always hidden from UI (Home Assistant ignores this, but included for clarity)
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo) -> None:
-        self._hass = hass
+        self._state_attrs = None
         self._entry = entry
         self._attr_device_info = device_info
         self._attr_unique_id = f"{entry.entry_id}_levels"
@@ -58,7 +58,7 @@ class LevelsSensor(SensorEntity):
         if not self._waiting_for_first_value:
             return
         self._waiting_for_first_value = False
-        self._service_value = self._fetch_service_value()
+        self._service_value, _ = self._fetch_service_value()
         self.async_write_ha_state()
         self._task = self.hass.loop.create_task(self._periodic_update())
 
@@ -69,40 +69,35 @@ class LevelsSensor(SensorEntity):
 
     async def _periodic_update(self):
         while True:
-            self._service_value, next_sleep = self._fetch_service_value()
-            self.async_write_ha_state()
-            await asyncio.sleep(next_sleep)
+            self._service_value, next_update = self._fetch_service_value()
+            if self.hass:  # Check if hass is available
+                self.async_write_ha_state()
+            await asyncio.sleep(next_update)
 
     def _fetch_service_value(self):
         # Call the global calculate_levels function with requested_length=60 (example)
-        result = calculate_levels(self._hass, 12)
+        result = calculate_levels(self.hass, 0)
         period = result.get("level_length")
         levels = result.get("levels", [])
 
-        local_tz = dt_util.get_time_zone(self._hass.config.time_zone)
+        local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
         now_local = datetime.now(local_tz)
         seconds_since_midnight = (now_local - now_local.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
         current_level_index = int(seconds_since_midnight // (period * 60)) if period > 0 else -1
         current_level = levels[current_level_index] if 0 <= current_level_index < len(levels) else 'U'
 
-        # New logic: If after 13:00 and there are 'U' levels, set next sleep to 120s
-        after_13 = now_local.hour > 13 or (now_local.hour == 13 and now_local.minute >= 0)
-        has_u_levels = 'U' in levels
-        if after_13 and has_u_levels:
-            seconds_to_next_level = 120
-        else:
-            seconds_to_next_level = (period * 60 - (seconds_since_midnight % (period * 60))) if period > 0 else 5
+        next_update_seconds = period * 60 - (seconds_since_midnight % (period * 60)) if period > 0 else 5
 
         _LOGGER.debug(f"LevelsSensor: Seconds since midnight: {seconds_since_midnight}")
         _LOGGER.debug(f"LevelsSensor _fetch_service_value result: {levels}")
-        _LOGGER.debug(f"LevelsSensor current level: {current_level}, seconds to next level: {seconds_to_next_level}")
+        _LOGGER.debug(f"LevelsSensor current level: {current_level}, seconds to next level: {next_update_seconds}")
         value = {
             "current_level": current_level,
             "level_length": period,
             "levels": levels,
-            "seconds_since_midnight": seconds_since_midnight,
+            "seconds_since_midnight": int(seconds_since_midnight),
         }
-        return value, seconds_to_next_level
+        return value, next_update_seconds
 
     @property
     def state(self):

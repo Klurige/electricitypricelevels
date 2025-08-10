@@ -71,7 +71,6 @@ class ElectricityPriceLevelSensor(SensorEntity):
             entry: The config entry for this sensor.
             device_info: Device information for the entity.
         """
-        self._hass = hass
         self._entry = entry
 
         self._nordpool_area_id = entry.options.get(CONF_NORDPOOL_AREA_ID, "")
@@ -272,7 +271,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
         if self._rates:
             try:
-                local_tz_str = self._hass.config.time_zone
+                local_tz_str = self.hass.config.time_zone
                 local_tz = dt_util.get_time_zone(local_tz_str)
                 now_local = datetime.datetime.now(local_tz)
                 today_local = now_local.date()
@@ -350,7 +349,7 @@ class ElectricityPriceLevelSensor(SensorEntity):
 
             if raw_price_entries:
                 processed_for_ranking = []
-                local_tz = dt_util.get_time_zone(self._hass.config.time_zone)
+                local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
 
                 for entry_data in raw_price_entries:
                     start_local = dt_util.parse_datetime(entry_data["start"]).astimezone(local_tz)
@@ -536,4 +535,3 @@ class ElectricityPriceLevelSensor(SensorEntity):
         if cost_val > high:
             return "High"
         return "Medium"
-
