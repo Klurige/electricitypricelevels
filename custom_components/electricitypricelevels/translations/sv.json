@@ -71,6 +71,9 @@
     "sensor": {
       "electricitypricelevels": {
         "name": "Pris nu"
+      },
+      "compactlevels": {
+        "name": "Kompakta nivåer"
       }
     }
   },

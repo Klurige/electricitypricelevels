@@ -1,16 +1,25 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from custom_components.electricitypricelevels.sensor.levels_array import LevelsSensor
-from homeassistant.core import HomeAssistant, State, Event
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.device_registry import DeviceInfo
+from custom_components.electricitypricelevels.sensor.compactlevels import CompactLevelsDataSensor, calculate_levels
 import asyncio
 import threading
 from datetime import datetime
 
+# Minimal mocks for State and Event to avoid Home Assistant dependency
+class State:
+    def __init__(self, entity_id, state, attributes=None):
+        self.entity_id = entity_id
+        self.state = state
+        self.attributes = attributes or {}
+
+class Event:
+    def __init__(self, event_type, data=None):
+        self.event_type = event_type
+        self.data = data or {}
+
 @pytest.fixture
 def hass():
-    hass = MagicMock(spec=HomeAssistant)
+    hass = MagicMock()
     hass.states = MagicMock()
     hass.states.get = MagicMock(return_value=None)
     hass.config = MagicMock()
@@ -22,17 +31,17 @@ def hass():
 
 @pytest.fixture
 def entry():
-    entry = MagicMock(spec=ConfigEntry)
+    entry = MagicMock()
     entry.entry_id = "test_entry_id"
     return entry
 
 @pytest.fixture
 def device_info():
-    return MagicMock(spec=DeviceInfo)
+    return MagicMock()
 
 @pytest.fixture
 def sensor(hass, entry, device_info):
-    s = LevelsSensor(hass, entry, device_info)
+    s = CompactLevelsDataSensor(hass, entry, device_info)
     s.hass = hass
     s.entity_id = "sensor.levels"
     return s
@@ -77,22 +86,27 @@ async def test_start_levels_sensor_idempotent(sensor):
 
 @patch("custom_components.electricitypricelevels.sensor.levels_array.calculate_levels")
 def test_fetch_service_value_normal(mock_calc, sensor, hass):
-    mock_calc.return_value = {"level_length": 60, "levels": ["A", "B", "C"]}
+    mock_calc.return_value = {"level_length": 60, "levels": "ABCDEFGHIJKL" * 5}
     value, _ = sensor._fetch_service_value()
-    assert value['current_level'] in ("A", "B", "C", "U")
+    assert isinstance(value["level_index"], int)
+    assert isinstance(value["levels"], list)
+    assert len(value["levels"]) == 60
+    assert all(isinstance(l, str) for l in value["levels"])
 
 @patch("custom_components.electricitypricelevels.sensor.levels_array.calculate_levels")
 def test_fetch_service_value_edge_cases(mock_calc, sensor, hass):
-    mock_calc.return_value = {"level_length": 0, "levels": []}
+    mock_calc.return_value = {"level_length": 0, "levels": ""}
     value, _ = sensor._fetch_service_value()
-    assert value['current_level'] == "U"
+    assert value["level_index"] == -1
+    assert value["levels"] == ["U"] * 60
 
 @patch("custom_components.electricitypricelevels.sensor.levels_array.calculate_levels")
 def test_fetch_service_value_all_unknown(mock_calc, sensor, hass):
-    mock_calc.return_value = {"level_length": 0, "levels": ["U"]}
+    mock_calc.return_value = {"level_length": 0, "levels": "U"}
     value, next_update = sensor._fetch_service_value()
     assert next_update == 5
-    assert value["levels"] == ["U"]
+    assert value["levels"] == ["U"] * 60
+    assert value["level_index"] == -1
 
 @pytest.mark.asyncio
 async def test_async_will_remove_from_hass(sensor):
@@ -160,3 +174,42 @@ def test_fetch_service_value_next_update_seconds(mock_dt, mock_tz, mock_calc, se
     # Seconds into current period = 36930 % 1800 = 930
     # Expected sleep = 1800 - 930 = 870
     assert next_update == 870
+
+def test_calculate_levels_fill_unknown_false(hass):
+    # Simulate a state with 2 rates, 30 min each, thresholds 1/2
+    class FakeState:
+        domain = "sensor"
+        def __init__(self):
+            self.attributes = {
+                "rates": [
+                    {"start": datetime(2023,1,1,0,0), "end": datetime(2023,1,1,0,30), "cost": 1},
+                    {"start": datetime(2023,1,1,0,30), "end": datetime(2023,1,1,1,0), "cost": 3},
+                ],
+                "low_threshold": 1.5,
+                "high_threshold": 2.5,
+            }
+    hass.states.async_all.return_value = [FakeState()]
+    # Should not fill with 'U' if fill_unknown is False
+    result = calculate_levels(hass, 30, fill_unknown=False)
+    assert result["levels"] == "LH"
+
+
+def test_calculate_levels_fill_unknown_true(hass):
+    # Simulate a state with 2 rates, 30 min each, thresholds 1/2
+    class FakeState:
+        domain = "sensor"
+        def __init__(self):
+            self.attributes = {
+                "rates": [
+                    {"start": datetime(2023,1,1,0,0), "end": datetime(2023,1,1,0,30), "cost": 1},
+                    {"start": datetime(2023,1,1,0,30), "end": datetime(2023,1,1,1,0), "cost": 3},
+                ],
+                "low_threshold": 1.5,
+                "high_threshold": 2.5,
+            }
+    hass.states.async_all.return_value = [FakeState()]
+    # Should fill with 'U' up to 96 chars (2 days, 30 min slots)
+    result = calculate_levels(hass, 30, fill_unknown=True)
+    assert result["levels"].startswith("LH")
+    assert len(result["levels"]) == 96
+    assert set(result["levels"][2:]) == {"U"}

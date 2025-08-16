@@ -71,7 +71,9 @@
     "sensor": {
       "electricitypricelevels": {
         "name": "Current price"
-      }
+      },
+      "compactlevels": {
+        "name": "Compact levels"
     }
   },
   "services": {
