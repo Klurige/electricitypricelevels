@@ -33,6 +33,7 @@ class CompactLevelsSensor(SensorEntity):
     _attr_visible = False  # Always hidden from UI (Home Assistant ignores this, but included for clarity)
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo) -> None:
+        self._state_attrs = None
         self._entry = entry
         description = SensorEntityDescription(
             key="compactlevels",
@@ -43,7 +44,8 @@ class CompactLevelsSensor(SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_device_info = device_info
         self._task = None
-        self._service_value = None
+        self._service_compact = None
+        self._service_seconds = None
         self._electricity_price_level_entity_id = f"sensor.electricitypricelevels"
         self._waiting_for_first_value = True
 
@@ -70,7 +72,7 @@ class CompactLevelsSensor(SensorEntity):
         if not self._waiting_for_first_value:
             return
         self._waiting_for_first_value = False
-        self._service_value = self._fetch_service_value()
+        self._service_seconds, self._service_compact, _ = self._fetch_compact_values()
         self.async_write_ha_state()
         self._task = self.hass.loop.create_task(self._periodic_update())
 
@@ -81,12 +83,12 @@ class CompactLevelsSensor(SensorEntity):
 
     async def _periodic_update(self):
         while True:
-            self._service_value, next_update = self._fetch_service_value()
+            self._service_seconds, self._service_compact, next_update = self._fetch_compact_values()
             if self.hass:  # Check if hass is available
                 self.async_write_ha_state()
             await asyncio.sleep(next_update)
 
-    def _fetch_service_value(self):
+    def _fetch_compact_values(self):
         global simulationLevelIndex
         next_update_seconds = None
         compact = None
@@ -126,18 +128,17 @@ class CompactLevelsSensor(SensorEntity):
             compact = f"{int(seconds_since_midnight)}:{int(period) if period > 0 else 0}:{next_levels}"
 
         value = {
-            "compact": compact,
-            "seconds_since_midnight": int(seconds_since_midnight),
+            "compact": compact
         }
 
-        _LOGGER.debug(f"Fetched service value: {value} ({len(value)}), next update in seconds: {next_update_seconds}")
-        return value, next_update_seconds
+        _LOGGER.debug(f"Seconds: {int(seconds_since_midnight)} Compact: {value} ({len(value)}), next update in seconds: {next_update_seconds}")
+        return int(seconds_since_midnight), value, next_update_seconds
 
     @property
     def state(self):
-        if self._service_value is not None and isinstance(self._service_value, dict):
-            state_value = self._service_value.get("seconds_since_midnight", [])
-            self._state_attrs = dict(self._service_value)
+        if self._service_compact is not None and isinstance(self._service_compact, dict):
+            state_value = self._service_seconds
+            self._state_attrs = dict(self._service_compact)
             return state_value
 
         self._state_attrs = {}
