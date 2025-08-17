@@ -5,7 +5,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import (
+    DOMAIN as SENSOR_DOMAIN,
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+)
 from homeassistant.helpers.entity import EntityCategory
 from datetime import datetime
 from homeassistant.util import dt as dt_util
@@ -16,7 +21,7 @@ _LOGGER = logging.getLogger(__name__)
 
 simulationLevelIndex = -1
 
-class CompactLevelsDataSensor(SensorEntity):
+class CompactLevelsSensor(SensorEntity):
     """
     Entity that exposes the latest electricity price levels as an attribute.
     Always hidden from the UI.
@@ -29,11 +34,14 @@ class CompactLevelsDataSensor(SensorEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device_info: DeviceInfo) -> None:
         self._entry = entry
-        self._state_attrs = None
+        description = SensorEntityDescription(
+            key="compactlevels",
+            translation_key="compactlevels",
+        )
+        self.entity_description = description
+        self.entity_id = f"{SENSOR_DOMAIN}.{description.key}"
+        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_device_info = device_info
-        self._attr_unique_id = f"{entry.entry_id}_levels"
-        # Use translated name from entity description
-        self._attr_name = self._get_translated_name(hass)
         self._task = None
         self._service_value = None
         self._electricity_price_level_entity_id = f"sensor.electricitypricelevels"
@@ -62,7 +70,7 @@ class CompactLevelsDataSensor(SensorEntity):
         if not self._waiting_for_first_value:
             return
         self._waiting_for_first_value = False
-        self._service_value, _ = self._fetch_service_value()
+        self._service_value = self._fetch_service_value()
         self.async_write_ha_state()
         self._task = self.hass.loop.create_task(self._periodic_update())
 
@@ -102,18 +110,19 @@ class CompactLevelsDataSensor(SensorEntity):
             required_level_length = 12
             result = calculate_levels(self.hass, required_level_length)
             period = float(result.get("level_length", 1))
+            interval_seconds = period * 60
             levels_str = result.get("levels", "")
             local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
             now_local = datetime.now(local_tz)
             seconds_since_midnight = (now_local - now_local.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
+            seconds_into_period = seconds_since_midnight % interval_seconds if period > 0 else 0
             current_level_index = int(seconds_since_midnight // (period * 60)) if period > 0 else -1
+            next_update_seconds = interval_seconds - seconds_into_period if period > 0 else 5
             intervals_in_12h = (12 * 60) // required_level_length
             next_levels = levels_str[current_level_index:current_level_index + intervals_in_12h]
             if len(next_levels) < intervals_in_12h:
                 next_levels += 'U' * (intervals_in_12h - len(next_levels))
-            interval_seconds = period * 60
-            seconds_into_period = seconds_since_midnight % interval_seconds if period > 0 else 0
-            next_update_seconds = interval_seconds - seconds_into_period if period > 0 else 5
+                next_update_seconds = 5
             compact = f"{int(seconds_since_midnight)}:{int(period) if period > 0 else 0}:{next_levels}"
 
         value = {
@@ -126,9 +135,8 @@ class CompactLevelsDataSensor(SensorEntity):
 
     @property
     def state(self):
-        if isinstance(self._service_value, str):
-            levels = self._service_value.get("seconds_since_midnight", [])
-            state_value = len([c for c in levels if c != 'U'])
+        if self._service_value is not None and isinstance(self._service_value, dict):
+            state_value = self._service_value.get("seconds_since_midnight", [])
             self._state_attrs = dict(self._service_value)
             return state_value
 
@@ -138,19 +146,6 @@ class CompactLevelsDataSensor(SensorEntity):
     @property
     def extra_state_attributes(self):
         return getattr(self, '_state_attrs', {})
-
-    def _get_translated_name(self, hass: HomeAssistant) -> str:
-        # Try to get the friendly name from translations
-        translations = hass.data.get('custom_components.electricitypricelevels.translations', {})
-        lang = hass.config.language if hasattr(hass.config, 'language') else 'en'
-        name = (
-            translations.get(lang, {})
-            .get('entity', {})
-            .get('sensor', {})
-            .get('compactlevels', {})
-            .get('name')
-        )
-        return name or "Levels"
 
 def calculate_levels(hass, requested_length, fill_unknown: bool = False):
     levels_str = ""

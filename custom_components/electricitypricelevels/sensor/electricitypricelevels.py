@@ -50,7 +50,7 @@ from ..const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class ElectricityPriceLevelSensor(SensorEntity):
+class ElectricityPriceLevelsSensor(SensorEntity):
     """
     Representation of an Electricity Price Level sensor.
 

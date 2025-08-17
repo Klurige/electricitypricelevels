@@ -120,29 +120,13 @@ called differently for other grids and suppliers.
     - `rank`: The rank of the price for the period compared to other prices for the current day.
 - **Update Frequency:** Updated every time a new price slot is entered. (See the NordPool integration for details on update frequency.)
 
-### levels_array Sensor
-The integration also provides a `levels_array` sensor, which exposes an array of electricity price levels for each hour of the current day. This sensor can be used for automations, dashboards, or advanced logic that requires access to the full day's price levels in a structured format.
+### compactlevels Sensor
+The integration also provides a `compactlevels` sensor, which exposes an array of electricity price levels for each hour of the current day. This sensor can be used for automations, dashboards, or advanced logic that requires access to the full day's price levels in a structured format.
 
-- **Entity ID:** `sensor.levels_array`
-- **State:** JSON array of price levels (e.g., `["low", "normal", "high", ...]`)
+- **Entity ID:** `sensor.compactlevels`
+- **State:** seconds since midnight when the current level started
 - **Attributes:**
-  - `levels`: Array of price levels for each hour
-  - `updated`: Timestamp of last update
-
-#### Example Usage
-You can use the `levels_array` sensor in Home Assistant automations to trigger actions based on the price level for a specific hour, or visualize the day's price levels in a dashboard.
-
-```yaml
-# Example automation: Turn on device when price level is low
-trigger:
-  - platform: template
-    value_template: >
-      {{ state_attr('sensor.levels_array', 'levels')[now().hour] == 'low' }}
-action:
-  - service: switch.turn_on
-    target:
-      entity_id: switch.my_device
-```
+  - `compact`: String containing seconds_since_midnight:level_length:levels where level_length is in minutes and levels is a string with one char per time period.
 
 ### `electricitypricelevels.get_levels`
 - **Description:** The price levels for today and tomorrow as a string with one char per time period. Main purpose is to provide data for the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock)

@@ -14,8 +14,8 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.translation import async_get_translations
 
 # Import your sensor classes
-from .electricitypricelevels import ElectricityPriceLevelSensor
-from .compactlevels import CompactLevelsDataSensor
+from .electricitypricelevels import ElectricityPriceLevelsSensor
+from .compactlevels import CompactLevelsSensor
 from .nordpool_coordinator import NordpoolDataCoordinator
 
 from ..const import DOMAIN
@@ -43,8 +43,8 @@ async def async_setup_entry(
         configuration_url=None,
     )
 
-    levels_sensor = ElectricityPriceLevelSensor(hass, entry, device_info)
-    compact_levels_sensor = CompactLevelsDataSensor(hass, entry, device_info)
+    levels_sensor = ElectricityPriceLevelsSensor(hass, entry, device_info)
+    compact_levels_sensor = CompactLevelsSensor(hass, entry, device_info)
 
     async_add_entities([levels_sensor, compact_levels_sensor], True)
 

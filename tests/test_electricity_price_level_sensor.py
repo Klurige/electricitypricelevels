@@ -12,7 +12,7 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 # If dt_util is used directly by the sensor for parsing, ensure it's available or mock its usage if complex.
 # from homeassistant.util import dt as dt_util
 
-from custom_components.electricitypricelevels.sensor.electricitypricelevels import ElectricityPriceLevelSensor
+from custom_components.electricitypricelevels.sensor.electricitypricelevels import ElectricityPriceLevelsSensor
 from custom_components.electricitypricelevels.const import (
     CONF_NORDPOOL_AREA_ID,
     CONF_LOW_THRESHOLD,
@@ -96,7 +96,7 @@ def mock_device_info():
 
 @pytest.fixture
 def sensor_instance(mock_hass, mock_config_entry, mock_device_info):
-    sensor = ElectricityPriceLevelSensor(mock_hass, mock_config_entry, mock_device_info)
+    sensor = ElectricityPriceLevelsSensor(mock_hass, mock_config_entry, mock_device_info)
     sensor.hass = mock_hass  # Manually assign hass to the instance for testing
     sensor.async_write_ha_state = AsyncMock() # Crucial mock
     # Prevent actual listener setup during tests not focused on it

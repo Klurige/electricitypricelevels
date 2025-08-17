@@ -1,9 +1,10 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from custom_components.electricitypricelevels.sensor.compactlevels import CompactLevelsDataSensor, calculate_levels
+from custom_components.electricitypricelevels.sensor.compactlevels import CompactLevelsSensor, calculate_levels
 import asyncio
 import threading
 from datetime import datetime
+import logging
 
 # Minimal mocks for State and Event to avoid Home Assistant dependency
 class State:
@@ -41,21 +42,21 @@ def device_info():
 
 @pytest.fixture
 def sensor(hass, entry, device_info):
-    s = CompactLevelsDataSensor(hass, entry, device_info)
+    s = CompactLevelsSensor(hass, entry, device_info)
     s.hass = hass
     s.entity_id = "sensor.levels"
     return s
 
-@patch("custom_components.electricitypricelevels.sensor.levels_array.async_track_state_change_event")
-@patch("custom_components.electricitypricelevels.sensor.levels_array.LevelsSensor._start_levels_sensor", new_callable=AsyncMock)
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.async_track_state_change_event")
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.CompactLevelsSensor._start_levels_sensor", new_callable=AsyncMock)
 async def test_async_added_to_hass_calls_start_on_available(mock_start, mock_track, sensor, hass):
     hass.states.get.return_value = State("sensor.electricitypricelevels", "normal")
     await sensor.async_added_to_hass()
     mock_start.assert_awaited_once()
     mock_track.assert_called_once()
 
-@patch("custom_components.electricitypricelevels.sensor.levels_array.async_track_state_change_event")
-@patch("custom_components.electricitypricelevels.sensor.levels_array.LevelsSensor._start_levels_sensor", new_callable=AsyncMock)
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.async_track_state_change_event")
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.CompactLevelsSensor._start_levels_sensor", new_callable=AsyncMock)
 async def test_async_added_to_hass_does_not_call_start_on_unavailable(mock_start, mock_track, sensor, hass):
     hass.states.get.return_value = State("sensor.electricitypricelevels", "unavailable")
     await sensor.async_added_to_hass()
@@ -84,29 +85,53 @@ async def test_start_levels_sensor_idempotent(sensor):
     await sensor._start_levels_sensor()
     assert sensor._waiting_for_first_value is False
 
-@patch("custom_components.electricitypricelevels.sensor.levels_array.calculate_levels")
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.calculate_levels")
 def test_fetch_service_value_normal(mock_calc, sensor, hass):
-    mock_calc.return_value = {"level_length": 60, "levels": "ABCDEFGHIJKL" * 5}
+    mock_calc.return_value = {"level_length": 12, "levels": "ABCDEFGHIJKL" * 5}
     value, _ = sensor._fetch_service_value()
-    assert isinstance(value["level_index"], int)
-    assert isinstance(value["levels"], list)
-    assert len(value["levels"]) == 60
-    assert all(isinstance(l, str) for l in value["levels"])
+    assert isinstance(value["seconds_since_midnight"], int)
+    assert isinstance(value["compact"], str)
+    parts = value["compact"].split(":")
+    assert len(parts) == 3
+    assert int(parts[0]) == value["seconds_since_midnight"]
+    assert isinstance(int(parts[1]), int)
+    level_length = int(parts[1])
+    assert level_length == 12
+    num_levels = 12 * 60 / level_length # 12 hours, 60 minutes each, divided by level length
+    assert len(parts[2]) == num_levels
 
-@patch("custom_components.electricitypricelevels.sensor.levels_array.calculate_levels")
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.calculate_levels")
 def test_fetch_service_value_edge_cases(mock_calc, sensor, hass):
-    mock_calc.return_value = {"level_length": 0, "levels": ""}
+    mock_calc.return_value = {"level_length": 12, "levels": ""}
     value, _ = sensor._fetch_service_value()
-    assert value["level_index"] == -1
-    assert value["levels"] == ["U"] * 60
+    assert isinstance(value["seconds_since_midnight"], int)
+    assert isinstance(value["compact"], str)
+    parts = value["compact"].split(":")
+    assert len(parts) == 3
+    assert int(parts[0]) == value["seconds_since_midnight"]
+    assert isinstance(int(parts[1]), int)
+    level_length = int(parts[1])
+    assert level_length == 12
+    num_levels = 12 * 60 / level_length # 12 hours, 60 minutes each, divided by level length
+    assert len(parts[2]) == num_levels
 
-@patch("custom_components.electricitypricelevels.sensor.levels_array.calculate_levels")
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.calculate_levels")
 def test_fetch_service_value_all_unknown(mock_calc, sensor, hass):
-    mock_calc.return_value = {"level_length": 0, "levels": "U"}
+    mock_calc.return_value = {"level_length": 12, "levels": "U"}
     value, next_update = sensor._fetch_service_value()
     assert next_update == 5
-    assert value["levels"] == ["U"] * 60
-    assert value["level_index"] == -1
+    assert isinstance(value["seconds_since_midnight"], int)
+    assert isinstance(value["compact"], str)
+    parts = value["compact"].split(":")
+    assert len(parts) == 3
+    assert int(parts[0]) == value["seconds_since_midnight"]
+    assert isinstance(int(parts[1]), int)
+    level_length = int(parts[1])
+    assert level_length == 12
+    num_levels = 12 * 60 / level_length # 12 hours, 60 minutes each, divided by level length
+    assert len(parts[2]) == num_levels
+    levels = parts[2]
+    assert all(c == 'U' for c in levels)
 
 @pytest.mark.asyncio
 async def test_async_will_remove_from_hass(sensor):
@@ -114,10 +139,11 @@ async def test_async_will_remove_from_hass(sensor):
     await sensor.async_will_remove_from_hass()
     sensor._task.cancel.assert_called_once()
 
-@patch("custom_components.electricitypricelevels.sensor.levels_array.LevelsSensor._fetch_service_value")
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.CompactLevelsSensor._fetch_service_value")
 @pytest.mark.asyncio
 async def test_periodic_update(mock_fetch, sensor):
     mock_fetch.return_value = ("A", 0.01)
+    sensor.platform = MagicMock()  # Mock platform to avoid ValueError for translation_key
     with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
         async def stop_after_one(*args, **kwargs):
             raise asyncio.CancelledError()
@@ -128,10 +154,10 @@ async def test_periodic_update(mock_fetch, sensor):
         mock_sleep.assert_called()
 
 
-@patch("custom_components.electricitypricelevels.sensor.levels_array.calculate_levels")
-@patch("custom_components.electricitypricelevels.sensor.levels_array.dt_util.get_time_zone")
-@patch("custom_components.electricitypricelevels.sensor.levels_array.datetime")
-def test_fetch_service_value_next_update_seconds(mock_dt, mock_tz, mock_calc, sensor, hass):
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.calculate_levels")
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.dt_util.get_time_zone")
+@patch("custom_components.electricitypricelevels.sensor.compactlevels.datetime")
+def test_fetch_service_value_now_and_next(mock_dt, mock_tz, mock_calc, sensor, hass):
     # Mock the time zone to be something simple
     mock_tz.return_value = "UTC"
 
@@ -139,36 +165,41 @@ def test_fetch_service_value_next_update_seconds(mock_dt, mock_tz, mock_calc, se
     mock_now = datetime(2023, 1, 1, 10, 15, 30)
     mock_dt.now.return_value = mock_now
 
-    # Levels are 60 minutes long
-    mock_calc.return_value = {"level_length": 60, "levels": ["A"] * 24}
+    mock_calc.return_value = {"level_length": 12, "levels": "ABCDEFGHIJKL" * 5 *24}
+    value, next_update = sensor._fetch_service_value()
 
-    _, next_update = sensor._fetch_service_value()
-
-    # At 10:15:30, the current 60-min level started at 10:00:00.
-    # It ends at 11:00:00.
+    # At 10:15:30, the current level started at 10:12:00.
+    # It ends at 10:24:00.
     # Seconds since midnight = 10 * 3600 + 15 * 60 + 30 = 36930
-    # Period in seconds = 60 * 60 = 3600
-    # Seconds into current period = 36930 % 3600 = 930
-    # Expected sleep = 3600 - 930 = 2670
-    assert next_update == 2670
+    assert isinstance(value["seconds_since_midnight"], int)
+    seconds_since_midnight = value["seconds_since_midnight"]
+    assert seconds_since_midnight == 36930
+
+    # Seconds into current period (10:15:30 - 10:12:00) = 3 minutes and 30 seconds = 210 seconds
+    # One period is 12 * 60 = 720 seconds
+    # Next update should be 720 - 210 = 510 seconds
+    assert next_update == 510
 
     # Test with a different time
     # Mock the time to be 10:59:50
     mock_now = datetime(2023, 1, 1, 10, 59, 50)
     mock_dt.now.return_value = mock_now
 
-    _, next_update = sensor._fetch_service_value()
+    value, next_update = sensor._fetch_service_value()
+
     # At 10:59:50, next update is in 10 seconds
     assert next_update == 10
 
     # Test with a different period
     # Levels are 30 minutes long
-    mock_calc.return_value = {"level_length": 30, "levels": ["A"] * 48}
+    mock_calc.return_value = {"level_length": 30, "levels": "ABCDEFGHIJKL" * 5 * 24}
 
     # Mock the time to be 10:15:30
     mock_now = datetime(2023, 1, 1, 10, 15, 30)
     mock_dt.now.return_value = mock_now
-    _, next_update = sensor._fetch_service_value()
+    value, next_update = sensor._fetch_service_value()
+    logging.debug(f"Fetched value: {value}, next update in {next_update} seconds")
+
     # Period in seconds = 30 * 60 = 1800
     # Seconds since midnight = 36930
     # Seconds into current period = 36930 % 1800 = 930
