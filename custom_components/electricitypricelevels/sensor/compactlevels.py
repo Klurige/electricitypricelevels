@@ -94,38 +94,48 @@ class CompactLevelsSensor(SensorEntity):
         compact = None
         seconds_since_midnight = 0
 
-        if simulationLevelIndex >= 0:
-            simulated_levels = "LMHM" * 40  # 160 values, repeating LMHM
-            seconds_since_midnight = simulationLevelIndex * 12 * 60
-            start = simulationLevelIndex
-            end = start + 60
-            if end <= len(simulated_levels):
-                levels = simulated_levels[start:end]
-            else:
-                levels = simulated_levels[start:] + simulated_levels[:end - len(simulated_levels)]
-            simulationLevelIndex = (simulationLevelIndex + 1) % len(simulated_levels)
-            next_update_seconds = 10
-            compact = f"{int(seconds_since_midnight)}:{12}:{levels}"
+        required_level_length = 12
+        levels_in_1_hour = (60 // required_level_length)
+        levels_in_12_hours = 12 * levels_in_1_hour
 
+        if simulationLevelIndex >= 0:
+            simulated_levels = "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            result = {'level_length': required_level_length, 'levels': simulated_levels}
+            seconds_since_midnight = simulationLevelIndex * 12 * 60
+            simulationLevelIndex = (simulationLevelIndex + 1) % len(simulated_levels)
         else:
             # Use real values
-            required_level_length = 12
             result = calculate_levels(self.hass, required_level_length)
-            period = float(result.get("level_length", 1))
-            interval_seconds = period * 60
-            levels_str = result.get("levels", "")
             local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
             now_local = datetime.now(local_tz)
             seconds_since_midnight = (now_local - now_local.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
-            seconds_into_period = seconds_since_midnight % interval_seconds if period > 0 else 0
-            current_level_index = int(seconds_since_midnight // (period * 60)) if period > 0 else -1
-            next_update_seconds = interval_seconds - seconds_into_period if period > 0 else 5
-            intervals_in_12h = (12 * 60) // required_level_length
-            next_levels = levels_str[current_level_index:current_level_index + intervals_in_12h]
-            if len(next_levels) < intervals_in_12h:
-                next_levels += 'U' * (intervals_in_12h - len(next_levels))
-                next_update_seconds = 5
-            compact = f"{int(seconds_since_midnight)}:{int(period) if period > 0 else 0}:{next_levels}"
+
+        levels_str = result.get("levels", "")
+        level_length = float(result.get("level_length", 0))
+        level_length_seconds = level_length * 60
+        seconds_into_period = seconds_since_midnight % level_length_seconds if level_length > 0 else 0
+        current_level_index = int(seconds_since_midnight // (level_length * 60)) if level_length > 0 else 0
+
+        if simulationLevelIndex >= 0:
+            next_update_seconds = 10
+        else:
+            next_update_seconds = level_length_seconds - seconds_into_period  if len(levels_str) > 0 else 5
+
+        next_levels = ""
+        if len(levels_str) > 0:
+            before_now_index = current_level_index - 1
+            start_index = before_now_index - levels_in_1_hour
+            if start_index < 0:
+                start_index += 2 * levels_in_12_hours
+                before_now_index += 2 * levels_in_12_hours
+
+            passed_levels = levels_str[start_index:before_now_index].lower()
+            future_levels = levels_str[current_level_index:current_level_index + levels_in_12_hours - levels_in_1_hour]
+            next_levels = passed_levels + future_levels
+
+        if len(next_levels) < levels_in_12_hours:
+            next_levels += 'U' * (levels_in_12_hours - len(next_levels))
+        compact = f"{int(seconds_since_midnight)}:{int(level_length) if level_length > 0 else 0}:{next_levels}"
 
         value = {
             "compact": compact

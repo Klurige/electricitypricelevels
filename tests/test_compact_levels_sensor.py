@@ -115,7 +115,7 @@ def test_fetch_service_value_edge_cases(mock_calc, sensor, hass):
 
 @patch("custom_components.electricitypricelevels.sensor.compactlevels.calculate_levels")
 def test_fetch_service_value_all_unknown(mock_calc, sensor, hass):
-    mock_calc.return_value = {"level_length": 12, "levels": "U"}
+    mock_calc.return_value = {"level_length": 12, "levels": ""}
     seconds_since_midnight, value, next_update = sensor._fetch_compact_values()
     assert next_update == 5
     assert isinstance(value["compact"], str)

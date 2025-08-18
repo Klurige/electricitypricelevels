@@ -122,11 +122,19 @@ called differently for other grids and suppliers.
 
 ### compactlevels Sensor
 The integration also provides a `compactlevels` sensor, which exposes an array of electricity price levels for each hour of the current day. This sensor can be used for automations, dashboards, or advanced logic that requires access to the full day's price levels in a structured format.
-
+It is crafted to be used with the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock) and the ESPHome based wall clock.
 - **Entity ID:** `sensor.compactlevels`
 - **State:** seconds since midnight when the current level started
 - **Attributes:**
   - `compact`: String containing seconds_since_midnight:level_length:levels where level_length is in minutes and levels is a string with one char per time period.
+      * `levels`: One char per price level for each hour of the day, where:
+        - `L` for Low
+        - `M` for Medium
+        - `H` for High
+        - `U` for Unknown (if no price is available for that period)
+        - `E` for internal error.
+        
+        The first chars are lower case, for recently passed time periods. The first upper case char is the current time period.
 
 ### `electricitypricelevels.get_levels`
 - **Description:** The price levels for today and tomorrow as a string with one char per time period. Main purpose is to provide data for the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock)
