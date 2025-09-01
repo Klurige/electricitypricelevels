@@ -121,20 +121,18 @@ called differently for other grids and suppliers.
 - **Update Frequency:** Updated every time a new price slot is entered. (See the NordPool integration for details on update frequency.)
 
 ### compactlevels Sensor
-The integration also provides a `compactlevels` sensor, which exposes an array of electricity price levels for each hour of the current day. This sensor can be used for automations, dashboards, or advanced logic that requires access to the full day's price levels in a structured format.
-It is crafted to be used with the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock) and the ESPHome based wall clock.
+The integration also provides a `compactlevels` sensor, which exposes an array of electricity price levels in a compact format. It is crafted for the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock) and the ESPHome-base wall clock.
 - **Entity ID:** `sensor.compactlevels`
-- **State:** seconds since midnight when the current level started
+- **State:** minutes since midnight when the current level started
 - **Attributes:**
-  - `compact`: String containing seconds_since_midnight:level_length:levels where level_length is in minutes and levels is a string with one char per time period.
-      * `levels`: One char per price level for each hour of the day, where:
-        - `L` for Low
-        - `M` for Medium
-        - `H` for High
-        - `U` for Unknown (if no price is available for that period)
-        - `E` for internal error.
-        
-        The first chars are lower case, for recently passed time periods. The first upper case char is the current time period.
+  - `compact`: String containing minutes_since_midnight:level_length:history:future where level_length is in minutes and history and future are two char arrays with one char per level, where:
+    * `L` for Low
+    * `M` for Medium
+    * `H` for High
+    * `U` for Unknown (if no price is available for that period)
+    * `E` for internal error.
+
+    Typcically, there is one hour of data for history and twelve hours for future, but that is not guaranteed.
 
 ### `electricitypricelevels.get_levels`
 - **Description:** The price levels for today and tomorrow as a string with one char per time period. Main purpose is to provide data for the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock)

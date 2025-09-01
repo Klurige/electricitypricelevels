@@ -98,7 +98,7 @@ def mock_device_info():
 def sensor_instance(mock_hass, mock_config_entry, mock_device_info):
     sensor = ElectricityPriceLevelsSensor(mock_hass, mock_config_entry, mock_device_info)
     sensor.hass = mock_hass  # Manually assign hass to the instance for testing
-    sensor.async_write_ha_state = AsyncMock() # Crucial mock
+    sensor.async_write_ha_state = MagicMock() # Crucial mock
     # Prevent actual listener setup during tests not focused on it
     sensor.async_on_remove = MagicMock()
     return sensor

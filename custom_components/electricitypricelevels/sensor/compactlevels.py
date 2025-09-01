@@ -93,56 +93,60 @@ class CompactLevelsSensor(SensorEntity):
         next_update_seconds = None
         compact = None
         seconds_since_midnight = 0
-
-        required_level_length = 12
-        levels_in_1_hour = (60 // required_level_length)
-        levels_in_12_hours = 12 * levels_in_1_hour
+        minutes_since_midnight = 0
 
         if simulationLevelIndex >= 0:
             simulated_levels = "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
-            result = {'level_length': required_level_length, 'levels': simulated_levels}
+            result = {'level_length': 12, 'levels': simulated_levels}
             seconds_since_midnight = simulationLevelIndex * 12 * 60
             simulationLevelIndex = (simulationLevelIndex + 1) % len(simulated_levels)
         else:
             # Use real values
-            result = calculate_levels(self.hass, required_level_length)
+            result = calculate_levels(self.hass)
             local_tz = dt_util.get_time_zone(self.hass.config.time_zone)
             now_local = datetime.now(local_tz)
-            seconds_since_midnight = (now_local - now_local.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
+            seconds_since_midnight = int((now_local - now_local.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds())
 
         levels_str = result.get("levels", "")
         level_length = float(result.get("level_length", 0))
-        level_length_seconds = level_length * 60
-        seconds_into_period = seconds_since_midnight % level_length_seconds if level_length > 0 else 0
-        current_level_index = int(seconds_since_midnight // (level_length * 60)) if level_length > 0 else 0
-
+        minutes_since_midnight = seconds_since_midnight / 60
+        minutes_into_period = minutes_since_midnight % level_length if level_length > 0 else 0
+        current_level_index = int(minutes_since_midnight / level_length) if level_length > 0 else 0
+        _LOGGER.debug(f"Minutes since midnight: {minutes_since_midnight}, Level length: {level_length}, Current level index: {current_level_index}, Minutes into period: {minutes_into_period}")
         if simulationLevelIndex >= 0:
             next_update_seconds = 10
         else:
-            next_update_seconds = level_length_seconds - seconds_into_period  if len(levels_str) > 0 else 5
+            next_update_seconds = (level_length - minutes_into_period)*60  if len(levels_str) > 0 else 5
 
-        next_levels = ""
+        passed_levels = ""
+        future_levels = ""
         if len(levels_str) > 0:
-            before_now_index = current_level_index - 1
-            start_index = before_now_index - levels_in_1_hour
-            if start_index < 0:
-                start_index += 2 * levels_in_12_hours
-                before_now_index += 2 * levels_in_12_hours
+            levels_in_1_hour = int(60 / level_length) if level_length > 0 else 0
+            levels_in_12_hours = int(12 * levels_in_1_hour)
+            number_future_levels = levels_in_12_hours
+            passed_start = int(current_level_index - levels_in_1_hour)
+            if passed_start < 0:
+                passed_start = int(passed_start + 2 * levels_in_12_hours)
+            passed_end = int(passed_start + levels_in_1_hour)
+            future_start = int(passed_end)
+            future_end = int(future_start + number_future_levels)
 
-            passed_levels = levels_str[start_index:before_now_index].lower()
-            future_levels = levels_str[current_level_index:current_level_index + levels_in_12_hours - levels_in_1_hour]
-            next_levels = passed_levels + future_levels
+            passed_levels = levels_str[passed_start:passed_end]
+            future_levels = levels_str[future_start:future_end]
 
-        if len(next_levels) < levels_in_12_hours:
-            next_levels += 'U' * (levels_in_12_hours - len(next_levels))
-        compact = f"{int(seconds_since_midnight)}:{int(level_length) if level_length > 0 else 0}:{next_levels}"
+            if len(passed_levels) < levels_in_1_hour:
+                passed_levels = 'U' * (levels_in_1_hour - len(passed_levels)) + passed_levels
+            if len(future_levels) < number_future_levels:
+                future_levels += 'U' * (number_future_levels - len(future_levels))
+
+        compact = f"{int(minutes_since_midnight)}:{int(level_length) if level_length > 0 else 0}:{passed_levels}:{future_levels}"
 
         value = {
             "compact": compact
         }
 
-        _LOGGER.debug(f"Seconds: {int(seconds_since_midnight)} Compact: {value} ({len(value)}), next update in seconds: {next_update_seconds}")
-        return int(seconds_since_midnight), value, next_update_seconds
+        _LOGGER.debug(f"Minutes: {int(minutes_since_midnight)} Compact: {value} ({len(value)}), next update in seconds: {next_update_seconds}")
+        return int(minutes_since_midnight), value, int(next_update_seconds + 0.5)
 
     @property
     def state(self):
@@ -158,7 +162,7 @@ class CompactLevelsSensor(SensorEntity):
     def extra_state_attributes(self):
         return getattr(self, '_state_attrs', {})
 
-def calculate_levels(hass, requested_length, fill_unknown: bool = False):
+def calculate_levels(hass, requested_length = 0, fill_unknown: bool = False):
     levels_str = ""
     low_threshold = None
     high_threshold = None
