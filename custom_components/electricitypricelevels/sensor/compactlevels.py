@@ -19,7 +19,18 @@ import logging
 
 _LOGGER = logging.getLogger(__name__)
 
+# Simulation settings for testing without real data
+# Set simulationLevelIndex to 0 to activate simulation, -1 to use real data
 simulationLevelIndex = -1
+# Each level represents this many minutes
+simulation_level_length_minutes = 60
+# Update period in seconds. Every time these many seconds have passed, the level index is incremented, meaning the "current" level moves forward by simulation_level_length_minutes
+simulation_update_seconds = 20
+
+# Simulation levels. A static string. Edit it for you particular simulation pattern.
+simulation_levels = ""
+if simulationLevelIndex >= 0:
+    simulation_levels = "LLLLLMMMHMMLLLLMMHHHMLLLLLLLLMMMHMMLLLLMMHHHMLLL"
 
 class CompactLevelsSensor(SensorEntity):
     """
@@ -89,17 +100,17 @@ class CompactLevelsSensor(SensorEntity):
             await asyncio.sleep(next_update)
 
     def _fetch_compact_values(self):
-        global simulationLevelIndex
+        global simulationLevelIndex, simulation_levels
+        global simulation_level_length_minutes, simulation_update_seconds
         next_update_seconds = None
         compact = None
         seconds_since_midnight = 0
         minutes_since_midnight = 0
 
         if simulationLevelIndex >= 0:
-            simulated_levels = "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
-            result = {'level_length': 12, 'levels': simulated_levels}
-            seconds_since_midnight = simulationLevelIndex * 12 * 60
-            simulationLevelIndex = (simulationLevelIndex + 1) % len(simulated_levels)
+            result = {'level_length': simulation_level_length_minutes, 'levels': simulation_levels}
+            seconds_since_midnight = (simulationLevelIndex * simulation_level_length_minutes * 60) % 86400
+            simulationLevelIndex = (simulationLevelIndex + 1) % len(simulation_levels)
         else:
             # Use real values
             result = calculate_levels(self.hass)
@@ -114,7 +125,7 @@ class CompactLevelsSensor(SensorEntity):
         current_level_index = int(minutes_since_midnight / level_length) if level_length > 0 else 0
         _LOGGER.debug(f"Minutes since midnight: {minutes_since_midnight}, Level length: {level_length}, Current level index: {current_level_index}, Minutes into period: {minutes_into_period}")
         if simulationLevelIndex >= 0:
-            next_update_seconds = 10
+            next_update_seconds = simulation_update_seconds
         else:
             next_update_seconds = (level_length - minutes_into_period)*60  if len(levels_str) > 0 else 5
 
