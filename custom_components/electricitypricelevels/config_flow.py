@@ -239,7 +239,6 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
 class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
         self.current_options = dict(config_entry.options)
         self.unit_of_measurement = "" # Will be populated in async_step_init
 
