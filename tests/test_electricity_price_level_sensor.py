@@ -14,7 +14,7 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 
 from custom_components.electricitypricelevels.sensor.electricitypricelevels import ElectricityPriceLevelsSensor
 from custom_components.electricitypricelevels.const import (
-    CONF_NORDPOOL_AREA_ID,
+    CONF_NORDPOOL_PRICES_SENSOR,
     CONF_LOW_THRESHOLD,
     CONF_HIGH_THRESHOLD,
     CONF_SUPPLIER_FIXED_FEE,
@@ -31,7 +31,7 @@ from custom_components.electricitypricelevels.const import (
 
 # Default config for tests
 DEFAULT_CONFIG_OPTIONS = {
-    CONF_NORDPOOL_AREA_ID: "FI",
+    CONF_NORDPOOL_PRICES_SENSOR: "sensor.nord_pool_fi_current_price",
     CONF_LOW_THRESHOLD: 0.10,  # EUR/kWh after all fees and VAT
     CONF_HIGH_THRESHOLD: 0.20, # EUR/kWh after all fees and VAT
     CONF_SUPPLIER_FIXED_FEE: 0.01, # EUR/kWh

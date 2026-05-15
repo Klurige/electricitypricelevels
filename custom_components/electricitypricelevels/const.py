@@ -7,7 +7,7 @@ import logging
 DOMAIN = "electricitypricelevels"
 LOGGER = logging.getLogger(__package__)
 
-CONF_NORDPOOL_AREA_ID = "nordpool_area_id"
+CONF_NORDPOOL_PRICES_SENSOR = "nordpool_prices_sensor"
 CONF_LOW_THRESHOLD = "low_threshold"
 CONF_HIGH_THRESHOLD = "high_threshold"
 CONF_SUPPLIER_NOTE = "supplier_note"

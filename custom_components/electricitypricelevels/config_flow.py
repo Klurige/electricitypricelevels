@@ -6,8 +6,6 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-# from voluptuous_serialize import convert # Not used in the provided snippet
-# from homeassistant.helpers.selector import selector # Not used in the provided snippet
 import homeassistant.helpers.config_validation as cv
 
 from homeassistant.config_entries import (
@@ -18,10 +16,12 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
+from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
+from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 
 
 from .const import (
-    CONF_NORDPOOL_AREA_ID,
+    CONF_NORDPOOL_PRICES_SENSOR,
     CONF_LOW_THRESHOLD,
     CONF_HIGH_THRESHOLD,
     CONF_SUPPLIER_NOTE,
@@ -41,17 +41,16 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-async def _validate_nordpool_area_id(hass: HomeAssistant, nordpool_area_id: str) -> tuple[bool, dict | None]:
-    """Validate the Nordpool area ID by checking the corresponding sensor."""
-    if not nordpool_area_id:
-        return False, None # Or specific error if empty is not allowed by schema
+async def _validate_nordpool_prices_sensor(hass: HomeAssistant, entity_id: str) -> tuple[bool, dict | None]:
+    """Validate the selected Nord Pool prices sensor entity."""
+    if not entity_id:
+        return False, None
 
-    entity_id = f"sensor.nord_pool_{nordpool_area_id.lower()}_current_price"
     state = hass.states.get(entity_id)
 
     if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
         _LOGGER.warning(
-            f"Nordpool sensor '{entity_id}' not found or unavailable for area_id '{nordpool_area_id}'."
+            f"Nordpool sensor '{entity_id}' not found or unavailable."
         )
         return False, None
 
@@ -81,23 +80,26 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         errors = {}
         if user_input is not None:
-            nordpool_area_id = user_input[CONF_NORDPOOL_AREA_ID]
-            is_valid, attributes = await _validate_nordpool_area_id(self.hass, nordpool_area_id)
+            prices_sensor = user_input[CONF_NORDPOOL_PRICES_SENSOR]
+            is_valid, attributes = await _validate_nordpool_prices_sensor(self.hass, prices_sensor)
 
             if is_valid and attributes is not None:
                 self.data.update(user_input)
                 self.data.update(attributes)
                 return await self.async_step_supplier_fees_and_credits()
             else:
-                errors[CONF_NORDPOOL_AREA_ID] = "invalid_area_id"
+                errors[CONF_NORDPOOL_PRICES_SENSOR] = "invalid_sensor"
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_NORDPOOL_AREA_ID, default=user_input.get(CONF_NORDPOOL_AREA_ID) if user_input else vol.UNDEFINED): vol.Coerce(str),
+                vol.Required(CONF_NORDPOOL_PRICES_SENSOR): EntitySelector(
+                    EntitySelectorConfig(
+                        domain=SENSOR_DOMAIN,
+                    )
+                ),
             }),
             errors=errors,
-            description_placeholders={CONF_NORDPOOL_AREA_ID: user_input.get(CONF_NORDPOOL_AREA_ID, "") if user_input else ""}
         )
 
     async def async_step_supplier_fees_and_credits(
@@ -205,7 +207,7 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
                     title="ElectricityPriceLevel", # Or a more dynamic title if desired
                     data=self.data,
                     options={ # Initialize options with data from main flow
-                        CONF_NORDPOOL_AREA_ID: self.data[CONF_NORDPOOL_AREA_ID],
+                        CONF_NORDPOOL_PRICES_SENSOR: self.data[CONF_NORDPOOL_PRICES_SENSOR],
                         CONF_SUPPLIER_NOTE: self.data.get(CONF_SUPPLIER_NOTE),
                         CONF_SUPPLIER_FIXED_FEE: self.data.get(CONF_SUPPLIER_FIXED_FEE),
                         CONF_SUPPLIER_VARIABLE_FEE: self.data.get(CONF_SUPPLIER_VARIABLE_FEE),
@@ -246,27 +248,27 @@ class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
             self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors = {}
-        # Determine unit_of_measurement based on currently saved (or about to be saved) area_id
-        # This is primarily for display in the form. Validation of new area_id happens below.
-        current_nordpool_area_id = self.current_options.get(CONF_NORDPOOL_AREA_ID, "")
-        if user_input and CONF_NORDPOOL_AREA_ID in user_input: # If user is changing it
-             current_nordpool_area_id = user_input[CONF_NORDPOOL_AREA_ID]
+        # Determine unit_of_measurement based on currently saved (or about to be saved) prices sensor
+        # This is primarily for display in the form. Validation of new sensor happens below.
+        current_prices_sensor = self.current_options.get(CONF_NORDPOOL_PRICES_SENSOR, "")
+        if user_input and CONF_NORDPOOL_PRICES_SENSOR in user_input: # If user is changing it
+             current_prices_sensor = user_input[CONF_NORDPOOL_PRICES_SENSOR]
 
-        # Fetch attributes for the current_nordpool_area_id to display suffixes correctly
+        # Fetch attributes for the current prices sensor to display suffixes correctly
         # This doesn't validate it yet, just for display. Validation is on submit.
-        _is_valid_for_display, display_attributes = await _validate_nordpool_area_id(self.hass, current_nordpool_area_id)
+        _is_valid_for_display, display_attributes = await _validate_nordpool_prices_sensor(self.hass, current_prices_sensor)
         self.unit_of_measurement = display_attributes.get("unit_of_measurement", "") if display_attributes else ""
 
 
         if user_input is not None:
-            # Validate the submitted Nordpool Area ID
-            submitted_nordpool_area_id = user_input[CONF_NORDPOOL_AREA_ID]
-            is_valid_area, sensor_attributes = await _validate_nordpool_area_id(self.hass, submitted_nordpool_area_id)
+            # Validate the submitted Nordpool prices sensor
+            submitted_prices_sensor = user_input[CONF_NORDPOOL_PRICES_SENSOR]
+            is_valid_sensor, sensor_attributes = await _validate_nordpool_prices_sensor(self.hass, submitted_prices_sensor)
 
-            if not is_valid_area:
-                errors[CONF_NORDPOOL_AREA_ID] = "invalid_area_id"
+            if not is_valid_sensor:
+                errors[CONF_NORDPOOL_PRICES_SENSOR] = "invalid_sensor"
             else:
-                # Area ID is valid, update unit_of_measurement based on potentially new valid sensor
+                # Sensor is valid, update unit_of_measurement based on potentially new valid sensor
                 self.unit_of_measurement = sensor_attributes.get("unit_of_measurement", "") if sensor_attributes else ""
 
                 # Validate thresholds
@@ -279,7 +281,7 @@ class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
                 if not errors:
                     # All validations passed, create/update the options entry
                     self.current_options.update(user_input)
-                    # Ensure price_divisor and currency are updated if area_id changed
+                    # Ensure price_divisor and currency are updated if sensor changed
                     if sensor_attributes:
                         self.current_options["price_divisor"] = sensor_attributes["price_divisor"]
                         self.current_options["currency"] = sensor_attributes["currency"]
@@ -288,9 +290,13 @@ class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
         # Populate schema with current/suggested values
         schema_dict = {
             vol.Required(
-                CONF_NORDPOOL_AREA_ID,
-                default=self.current_options.get(CONF_NORDPOOL_AREA_ID, "")
-            ): vol.Coerce(str),
+                CONF_NORDPOOL_PRICES_SENSOR,
+                default=self.current_options.get(CONF_NORDPOOL_PRICES_SENSOR, "")
+            ): EntitySelector(
+                EntitySelectorConfig(
+                    domain=SENSOR_DOMAIN,
+                )
+            ),
             vol.Optional(
                 CONF_LOW_THRESHOLD,
                 description={"suggested_value": self.current_options.get(CONF_LOW_THRESHOLD), "suffix": self.unit_of_measurement},

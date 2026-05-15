@@ -31,7 +31,7 @@ from homeassistant.components.sensor import (
 from homeassistant.helpers.entity import EntityCategory
 
 from ..const import (
-    CONF_NORDPOOL_AREA_ID,
+    CONF_NORDPOOL_PRICES_SENSOR,
     CONF_LOW_THRESHOLD,
     CONF_HIGH_THRESHOLD,
     CONF_SUPPLIER_FIXED_FEE,
@@ -73,7 +73,7 @@ class ElectricityPriceLevelsSensor(SensorEntity):
         """
         self._entry = entry
 
-        self._nordpool_area_id = entry.options.get(CONF_NORDPOOL_AREA_ID, "")
+        self._nordpool_prices_sensor = entry.options.get(CONF_NORDPOOL_PRICES_SENSOR, "")
         self._high_threshold = entry.options.get(CONF_HIGH_THRESHOLD, 0.0) or 1000000000.0
         self._low_threshold = entry.options.get(CONF_LOW_THRESHOLD, 0.0) or -1000000000.0
         self._supplier_fixed_fee = entry.options.get(CONF_SUPPLIER_FIXED_FEE, 0.0) or 0.0
@@ -110,10 +110,10 @@ class ElectricityPriceLevelsSensor(SensorEntity):
 
         self._attr_device_info = device_info
 
-        self._nordpool_trigger_entity_id = f"sensor.nord_pool_{self._nordpool_area_id.lower()}_current_price"
+        self._nordpool_trigger_entity_id = self._nordpool_prices_sensor
         self._remove_nordpool_listener: Callable | None = None
 
-        _LOGGER.debug("ElectricityPriceLevelSensor initialized for area %s, trigger: %s", self._nordpool_area_id, self._nordpool_trigger_entity_id)
+        _LOGGER.debug("ElectricityPriceLevelSensor initialized for prices sensor %s", self._nordpool_prices_sensor)
 
     async def async_added_to_hass(self) -> None:
         """
