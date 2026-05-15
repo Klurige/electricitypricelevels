@@ -58,8 +58,8 @@
           "supplier_variable_credit": "Elhandelsavdrag i procent vid export",
           "grid_note": "Noteringar om elnätsavgifter och intäkter.",
           "grid_fixed_fee": "Elnätsavgift per enhet",
-          "grid_variable_fee": "Elnätspåslag i procent",
-          "grid_fixed_credit": "Elnätsnytta per enhet",
+          "grid_variable_fee": "Elnätsavgift i procent",
+          "grid_fixed_credit": "Elnätsintäkt per enhet",
           "grid_variable_credit": "Elnätsintäkt i procent",
           "grid_energy_tax": "Energiskatt per enhet",
           "electricity_vat": "Elmoms i procent"
