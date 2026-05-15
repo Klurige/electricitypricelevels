@@ -33,6 +33,9 @@ SERVICE_GET_LEVELS_SCHEMA = vol.Schema(
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
 
+    if hass.services.has_service(DOMAIN, SERVICE_GET_LEVELS):
+        return
+
     def get_service_params(
         call: ServiceCall,
     ) -> tuple[int]:

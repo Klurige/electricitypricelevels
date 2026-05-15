@@ -2,7 +2,7 @@ import logging
 from datetime import timedelta, date, datetime, time
 from typing import Callable, Any, Coroutine
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.event import async_call_later
 from homeassistant.util import dt as dt_util
@@ -11,7 +11,7 @@ from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
 _LOGGER = logging.getLogger(__name__)
 
 class NordpoolDataCoordinator:
-    def __init__(self, hass: HomeAssistant, nordpool_config_entry_id: str, data_update_callback: Callable[[dict[str, Any]], Coroutine[Any, Any, None]]):
+    def __init__(self, hass: HomeAssistant, nordpool_config_entry_id: str, data_update_callback: Callable[[dict[str, Any]], Coroutine[Any, Any, None]], currency: str | None = None):
         self.hass = hass
         self.nordpool_config_entry_id = nordpool_config_entry_id
         self.data_update_callback = data_update_callback
@@ -19,7 +19,8 @@ class NordpoolDataCoordinator:
         self._current_schedule_state: list[str] = ["INITIALIZING"]
         self._is_running = False
 
-        self._currency: str | None = None
+        # Initialize currency from config if provided
+        self._currency: str | None = currency if currency else "EUR"
         self._data_for_current_hass_date: list | None = None # Raw price list for current HASS date
         self._date_of_current_data: date | None = None       # The HASS date for which _data_for_current_hass_date is valid
 
@@ -58,23 +59,13 @@ class NordpoolDataCoordinator:
 
                     _LOGGER.info(f"Extracted area '{area_id}' and price data list from service response.")
 
-                    determined_currency = None
-                    currency_entity_id = f"sensor.nord_pool_{area_id.lower()}_currency"
-                    currency_state_obj = self.hass.states.get(currency_entity_id)
-
-                    if currency_state_obj and currency_state_obj.state not in (None, STATE_UNKNOWN, STATE_UNAVAILABLE):
-                        determined_currency = currency_state_obj.state
-                        _LOGGER.info(f"Fetched currency '{determined_currency}' from entity '{currency_entity_id}'.")
+                    # Use the currency that was passed during initialization
+                    determined_currency = self._currency
+                    if determined_currency:
+                        _LOGGER.debug(f"Using currency '{determined_currency}' from configuration.")
                     else:
-                        _LOGGER.warning(
-                            f"Currency entity '{currency_entity_id}' not found or has invalid state "
-                            f"({currency_state_obj.state if currency_state_obj else 'None'}). Currency will be None."
-                        )
-
-                    if not determined_currency:
-                        _LOGGER.warning(
-                            "Currency could not be determined from this fetch. "
-                            "The 'currency' field in the data payload will be None."
+                        _LOGGER.debug(
+                            "No explicit currency provided, using default."
                         )
 
                     final_payload = {
@@ -108,38 +99,43 @@ class NordpoolDataCoordinator:
         combined_raw_data = []
         data_sent = False
 
+        _LOGGER.debug(
+            f"_send_updated_data_to_sensor called: current_hass_date={current_hass_date}, "
+            f"self._data_for_current_hass_date={'present' if self._data_for_current_hass_date else 'None'} (date: {self._date_of_current_data}), "
+            f"self._data_for_next_hass_date={'present' if self._data_for_next_hass_date else 'None'} (date: {self._date_of_next_data})"
+        )
+
         if self._data_for_current_hass_date and self._date_of_current_data == current_hass_date:
             combined_raw_data.extend(self._data_for_current_hass_date)
-            _LOGGER.debug(f"Including data for {self._date_of_current_data} (current day) in payload.")
+            _LOGGER.debug(f"Including data for {self._date_of_current_data} (current day) in payload. Points: {len(self._data_for_current_hass_date)}")
         elif self._data_for_current_hass_date:
             _LOGGER.warning(f"Not including stale current_day_data (for {self._date_of_current_data}) in payload for HASS date {current_hass_date}.")
 
         expected_next_day_date = current_hass_date + timedelta(days=1)
         if self._data_for_next_hass_date and self._date_of_next_data == expected_next_day_date:
             combined_raw_data.extend(self._data_for_next_hass_date)
-            _LOGGER.debug(f"Including data for {self._date_of_next_data} (next day) in payload.")
+            _LOGGER.debug(f"Including data for {self._date_of_next_data} (next day) in payload. Points: {len(self._data_for_next_hass_date)}")
         elif self._data_for_next_hass_date:
              _LOGGER.warning(f"Not including stale next_day_data (for {self._date_of_next_data}) in payload for HASS date {current_hass_date} (expected next: {expected_next_day_date}).")
 
         if combined_raw_data:
             if not self._currency:
-                _LOGGER.warning("Sending data to sensor but coordinator's currency is not set. This might cause issues.")
+                _LOGGER.debug("Sending data to sensor without currency (will use configured currency if available).")
 
             payload_to_send = {
                 "currency": self._currency,
                 "raw": combined_raw_data
             }
-            _LOGGER.info(f"Sending updated combined data to sensor. Dates covered: current_hass_date={current_hass_date} (data for {self._date_of_current_data if self._data_for_current_hass_date else 'None'}), next_day_date={expected_next_day_date} (data for {self._date_of_next_data if self._data_for_next_hass_date else 'None'}). Total points: {len(combined_raw_data)}")
+            _LOGGER.info(f"Sending updated combined data to sensor. Currency: {self._currency}, Total points: {len(combined_raw_data)}")
             await self.data_update_callback(payload_to_send)
             data_sent = True
         else:
-            _LOGGER.info(f"No valid combined data to send to sensor for HASS date {current_hass_date}.")
+            _LOGGER.warning(f"No combined_raw_data available to send. Current: {len(self._data_for_current_hass_date) if self._data_for_current_hass_date else 0} items for {self._date_of_current_data}, Next: {len(self._data_for_next_hass_date) if self._data_for_next_hass_date else 0} items for {self._date_of_next_data}")
 
         if not data_sent and (self._data_for_current_hass_date or self._data_for_next_hass_date):
             _LOGGER.debug(f"Data was available (current: {self._date_of_current_data}, next: {self._date_of_next_data}) but not sent for HASS date {current_hass_date}, likely due to date mismatch.")
 
 
-    @callback
     async def _trigger_and_reschedule_nordpool(self, utc_now_from_scheduler: datetime | None = None) -> None:
         if not self._is_running:
             _LOGGER.debug("Coordinator is stopped, not rescheduling.")
@@ -189,25 +185,29 @@ class NordpoolDataCoordinator:
             call_status, nordpool_day_payload = await self._execute_nordpool_call_logic(target_fetch_date)
 
             if call_status == "SUCCESS_DATA" and nordpool_day_payload:
-                _LOGGER.info(f"Successfully fetched data for {target_fetch_date} (Operation: {current_operation_type}).")
+                _LOGGER.info(f"Successfully fetched data for {target_fetch_date}. Data points: {len(nordpool_day_payload.get('raw', []))} items. Currency: {nordpool_day_payload.get('currency')}")
                 new_raw_data = nordpool_day_payload.get("raw")
                 new_currency = nordpool_day_payload.get("currency")
 
                 if new_currency:
                     if self._currency and self._currency != new_currency:
-                        _LOGGER.warning(f"Currency changed from {self._currency} to {new_currency}. Using new currency.")
+                        _LOGGER.debug(f"Currency changed from {self._currency} to {new_currency}. Using new currency.")
                     self._currency = new_currency
                 elif not self._currency:
-                     _LOGGER.warning(f"Fetched data for {target_fetch_date} has no currency, and no prior currency is set for coordinator.")
+                     _LOGGER.debug(f"Fetched data for {target_fetch_date} has no currency, using configured currency if available.")
 
                 if current_operation_type == "TODAY":
                     self._data_for_current_hass_date = new_raw_data
                     self._date_of_current_data = target_fetch_date
+                    _LOGGER.debug(f"Stored TODAY data: {len(new_raw_data) if new_raw_data else 0} items for {target_fetch_date}")
                 elif current_operation_type == "TOMORROW":
                     self._data_for_next_hass_date = new_raw_data
                     self._date_of_next_data = target_fetch_date
+                    _LOGGER.debug(f"Stored TOMORROW data: {len(new_raw_data) if new_raw_data else 0} items for {target_fetch_date}")
+            elif call_status == "SUCCESS_NO_DATA":
+                _LOGGER.warning(f"Fetch for {target_fetch_date} returned SUCCESS but no data payload.")
             elif call_status != "NOT_ATTEMPTED":
-                _LOGGER.warning(f"Nordpool call for {target_fetch_date} (Op: {current_operation_type}) resulted in status: {call_status}.")
+                _LOGGER.warning(f"Nordpool call for {target_fetch_date} (Op: {current_operation_type}) failed with status: {call_status}.")
 
         # 3. Send data to sensor (always attempts to send current valid state)
         await self._send_updated_data_to_sensor(current_hass_date)
@@ -251,11 +251,6 @@ class NordpoolDataCoordinator:
             next_delay_seconds = max(0.1, (next_day_13h00 - hass_now).total_seconds())
             new_log_state_name = "DAILY_SCHEDULE_NEXT_CHECK_TOMORROW_13:00"
 
-        if target_fetch_date and call_status not in ("SUCCESS_DATA", "SUCCESS_NO_DATA", "ERROR_OTHER", "ERROR_SERVICE_NOT_READY", "ERROR_MISSING_CURRENCY", "ERROR_BAD_RESPONSE_STRUCTURE", "NOT_ATTEMPTED"):
-            _LOGGER.error(f"Unhandled call_status: {call_status} for {target_fetch_date}. Fallback retry in 5 mins.")
-            next_delay_seconds = 5 * 60 # Override previous delay if unhandled status
-            new_log_state_name = f"ERROR_UNHANDLED_STATUS_FALLBACK_5M ({call_status})"
-
         # Cancel previous task and schedule next one
         if self._task_remover[0]:
             try:
@@ -288,15 +283,15 @@ class NordpoolDataCoordinator:
             _LOGGER.warning("Coordinator already running.")
             return
         self._is_running = True
-        # Reset data on start to ensure fresh fetches
-        self._currency = None
+        # Reset data on start to ensure fresh fetches, but preserve configured currency
+        # Note: self._currency was set during __init__ and should not be reset
         self._data_for_current_hass_date = None
         self._date_of_current_data = None
         self._data_for_next_hass_date = None
         self._date_of_next_data = None
 
         self._current_schedule_state[0] = "INITIAL_CALL_SCHEDULED"
-        _LOGGER.info(f"Nordpool coordinator starting. Scheduling initial data fetch. State: {self._current_schedule_state[0]}")
+        _LOGGER.info(f"Nordpool coordinator starting with currency='{self._currency}'. Scheduling initial data fetch. State: {self._current_schedule_state[0]}")
 
         if self._task_remover[0]:
             try:

@@ -11,9 +11,9 @@ This integration works particularly well with the [LevelIndicatorClock](https://
 ## Features
 - Uses electricity prices provided by the Home Assistant NordPool integration.
 - Categorizes prices into levels (e.g., low, medium, high).
-- Provides sensors for use in automations and dashboards.
+- Provides two sensors for use in automations and dashboards.
 - Supports multiple languages (English, Swedish).
-- Easy configuration via UI or YAML.
+- Easy configuration via the Home Assistant UI.
   - Adds support for extra fees and taxes from your grid and supplier.
   - Allows for setting thresholds for low and high prices.
   - Adds support for credits when exporting electricity.
@@ -43,30 +43,10 @@ Or use the direct link:
 ### Option 2: Manual
 1. Copy the `custom_components/electricitypricelevels` directory into your Home Assistant `custom_components` folder.
 2. Restart Home Assistant.
-3. Add the integration via the Home Assistant UI or YAML configuration.
+3. Add the integration via the Home Assistant UI.
 
 ## Configuration
-You can configure the integration via the Home Assistant UI (recommended) or manually in `configuration.yaml`:
-
-```yaml
-# Example configuration.yaml
-electricitypricelevels:
-  nordpool_area_id: "SE3"
-  low_threshold: 0.8
-  high_threshold: 1.5
-  supplier_note: "My supplier fees"
-  supplier_fixed_fee: 0.12
-  supplier_variable_fee: 0.05
-  supplier_fixed_credit: 0.00
-  supplier_variable_credit: 0.00
-  grid_note: "My grid fees"
-  grid_fixed_fee: 0.20
-  grid_variable_fee: 0.10
-  grid_fixed_credit: 0.00
-  grid_variable_credit: 0.00
-  grid_energy_tax: 0.45
-  electricity_vat: 0.25
-```
+This integration is configured through the Home Assistant UI. During setup you select the Nord Pool prices sensor to use, then configure optional fees, credits, taxes, thresholds, and recorder behavior.
 
 There are many extra fees and taxes that can be added to the price. Suppliers and grid owners can have many different types of fees, which may vary by region or contract. You can specify the details of these fees in the `supplier_note` and `grid_note` fields, and add up the actual amounts in the corresponding fee fields. This allows you to document and sum up all relevant charges for your specific situation in the configuration.
 
@@ -75,7 +55,7 @@ called differently for other grids and suppliers.
 
 | Key                        | Description                  | Example Value |
 |----------------------------|------------------------------|---------------|
-| `nordpool_area_id`         | Nord Pool Area id            | "SE3"        |
+| `nordpool_prices_sensor`   | Nord Pool prices sensor entity id | `sensor.nordpool_kwh_se3_sek_3_10_025` |
 | `low_threshold`            | Low price threshold          | 0.8           |
 | `high_threshold`           | High price threshold         | 1.5           |
 | `supplier_note`            | Supplier note                | "My supplier fees" |
@@ -90,10 +70,18 @@ called differently for other grids and suppliers.
 | `grid_variable_credit`     | Grid variable credit         | 0.00          |
 | `grid_energy_tax`          | Grid energy tax              | 0.45          |
 | `electricity_vat`          | Electricity VAT              | 0.25          |
+| `exclude_from_recording`   | Exclude integration sensors from recorder/history | `true` |
+
+When `exclude_from_recording` is `true` (default), Home Assistant recorder/history excludes:
+- `sensor.electricitypricelevels`
+- `sensor.compactlevels`
+
+In addition, the `rates` attribute on `sensor.electricitypricelevels` is excluded from recorder attribute storage to avoid oversized state attributes.
 
 ## Usage
-- The integration adds one sensor and one service, `sensor.electricitypricelevels` and `electricitypricelevels.get_levels`.
+- The integration adds two sensors and one service: `sensor.electricitypricelevels`, `sensor.compactlevels`, and `electricitypricelevels.get_levels`.
   - `sensor.electricitypricelevels` provides the current electricity price with all fees and taxes included, and a list of all known upcoming prices. (Nordpool gets the next day prices around 14:00 CET)
+  - `sensor.compactlevels` provides a compact level string intended for integrations such as Level Indicator Clock.
   - `electricitypricelevels.get_levels` provides a string containing one character for each price level. ( Level clock pattern. See https://github.com/Klurige/LevelIndicatorClock)
 - Use these sensors in automations to optimize energy usage (e.g., run appliances when prices are low).
 
@@ -104,7 +92,7 @@ called differently for other grids and suppliers.
   - `spot_price`: The raw price from the NordPool sensor (before fees/taxes).
   - `cost`: The total cost including all fees and taxes.
   - `credit`: The total credit received when exporting electricity.
-  - `unit`: The unit for the electricity power. Typically `kWh`. Sourced from the NordPool sensor.
+  - `unit`: The energy unit from the selected Nord Pool prices sensor, for example `kWh` or `MWh`.
   - `currency`: The currency of the price, for example `SEK` or `EUR`. Sourced from the NordPool sensor.
   - `level`: Current price level as a string (`Low`, `Medium`, `High`).
   - `rank`: The current rank of the price compared to other prices for the current day. See the [Ranking](#ranking) section for details.
@@ -118,12 +106,13 @@ called differently for other grids and suppliers.
     - `credit`: The total credit for the period, if applicable.
     - `level`: The price level for the period.
     - `rank`: The rank of the price for the period compared to other prices for the current day.
-- **Update Frequency:** Updated every time a new price slot is entered. (See the NordPool integration for details on update frequency.)
+- **Update Frequency:** Updated when new Nord Pool data is processed and when the selected Nord Pool source sensor changes state.
 
-### compactlevels Sensor
-The integration also provides a `compactlevels` sensor, which exposes an array of electricity price levels in a compact format. It is crafted for the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock) and the ESPHome-base wall clock.
+### `sensor.compactlevels`
+The integration also provides `sensor.compactlevels`, which exposes electricity price levels in a compact format. It is intended for the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock) and similar ESPHome-based clocks.
+- **Default visibility:** Disabled by default in the entity registry.
 - **Entity ID:** `sensor.compactlevels`
-- **State:** minutes since midnight when the current level started
+- **State:** Minutes since midnight.
 - **Attributes:**
   - `compact`: String containing minutes_since_midnight:level_length:history:future where level_length is in minutes and history and future are two char arrays with one char per level, where:
     * `L` for Low
@@ -132,22 +121,22 @@ The integration also provides a `compactlevels` sensor, which exposes an array o
     * `U` for Unknown (if no price is available for that period)
     * `E` for internal error.
 
-    Typcically, there is one hour of data for history and twelve hours for future, but that is not guaranteed.
+    Typically, there is one hour of data for history and twelve hours for future, but that is not guaranteed.
 
 ### `electricitypricelevels.get_levels`
 - **Description:** The price levels for today and tomorrow as a string with one char per time period. Main purpose is to provide data for the Level Indicator Clock (https://github.com/Klurige/LevelIndicatorClock)
 - **Input parameters:**
-  - `level_length`: The length of each level in minutes. Default is the length of the NordPool price periods, which is one hour, but soon to change to 15 minutes.
+  - `level_length`: The length of each level in minutes. Default `0` means the same length as the Nord Pool price periods.
 - **Output:**
   - `level_length`: The length of each level in minutes.
-  - `levels`: A string representing the current price level pattern, where each character corresponds to a price level for today and tomorrow. Each character represents a level_length slot in minutes, with:
+  - `levels`: A string representing the current price level pattern, where each character corresponds to a price level for today and tomorrow. Each character represents a `level_length` slot in minutes, with:
     - `L` for Low
     - `M` for Medium
     - `H` for High
     - `U` for Unknown (if no price is available for that period)
     - `E` for internal error.
-    - `low_threshold`: The threshold cost for low prices.
-    - `high_threshold`: The threshold cost for high prices.
+  - `low_threshold`: The threshold cost for low prices.
+  - `high_threshold`: The threshold cost for high prices.
   
 The level for a time period is determined by checking the `cost` attribute of the price for that period against the configured thresholds. The whole time period must be below a threshold to get that level.
 
@@ -309,8 +298,9 @@ Add this to your `configuration.yaml` and restart Home Assistant to debug the co
 logger:
   default: info
   logs:
+    custom_components.electricitypricelevels: debug
     custom_components.electricitypricelevels.sensor.electricitypricelevels: info
-    custom_components.electricitypricelevels.sensor.time_sensor: info
+    custom_components.electricitypricelevels.sensor.compactlevels: info
     custom_components.electricitypricelevels.util: debug
 ```
 
@@ -325,7 +315,7 @@ To run the unit tests from command line, you should first setup a virtual enviro
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements_dev.txt
+pip install -r requirements.test.txt
 ```
 
 Then you can run the tests with:

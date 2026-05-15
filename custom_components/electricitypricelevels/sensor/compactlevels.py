@@ -1,6 +1,6 @@
 import math
 
-from homeassistant.core import HomeAssistant, callback, Event, State
+from homeassistant.core import HomeAssistant, Event, State
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.helpers.event import async_track_state_change_event
@@ -16,6 +16,8 @@ from datetime import datetime
 from homeassistant.util import dt as dt_util
 import asyncio
 import logging
+
+from ..const import CONF_EXCLUDE_FROM_RECORDING
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +56,7 @@ class CompactLevelsSensor(SensorEntity):
         self.entity_id = f"{SENSOR_DOMAIN}.{description.key}"
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_device_info = device_info
+        self._attr_exclude_from_recording = entry.options.get(CONF_EXCLUDE_FROM_RECORDING, True)
         self._task = None
         self._service_compact = None
         self._service_seconds = None
@@ -73,7 +76,6 @@ class CompactLevelsSensor(SensorEntity):
         if initial_state and initial_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, "unknown"):
             await self._start_levels_sensor()
 
-    @callback
     async def _handle_electricity_price_level_update(self, event: Event) -> None:
         new_state: State | None = event.data.get("new_state")
         if new_state and new_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, "unknown") and self._waiting_for_first_value:
@@ -85,7 +87,9 @@ class CompactLevelsSensor(SensorEntity):
         self._waiting_for_first_value = False
         self._service_seconds, self._service_compact, _ = self._fetch_compact_values()
         self.async_write_ha_state()
-        self._task = self.hass.loop.create_task(self._periodic_update())
+        self._task = self.hass.async_create_background_task(
+            self._periodic_update(), "compactlevels_periodic_update"
+        )
 
     async def async_will_remove_from_hass(self) -> None:
         if self._task:
@@ -94,9 +98,13 @@ class CompactLevelsSensor(SensorEntity):
 
     async def _periodic_update(self):
         while True:
-            self._service_seconds, self._service_compact, next_update = self._fetch_compact_values()
-            if self.hass:  # Check if hass is available
-                self.async_write_ha_state()
+            try:
+                self._service_seconds, self._service_compact, next_update = self._fetch_compact_values()
+                if self.hass:
+                    self.async_write_ha_state()
+            except Exception:
+                _LOGGER.exception("Error in compact levels periodic update")
+                next_update = 60
             await asyncio.sleep(next_update)
 
     def _fetch_compact_values(self):
@@ -156,7 +164,7 @@ class CompactLevelsSensor(SensorEntity):
             "compact": compact
         }
 
-        _LOGGER.debug(f"Minutes: {int(minutes_since_midnight)} Compact: {value} ({len(value)}), next update in seconds: {next_update_seconds}")
+        _LOGGER.debug(f"Minutes: {int(minutes_since_midnight)} Compact: {value}, next update in seconds: {next_update_seconds}")
         return int(minutes_since_midnight), value, int(next_update_seconds + 0.5)
 
     @property
@@ -180,39 +188,37 @@ def calculate_levels(hass, requested_length = 0, fill_unknown: bool = False):
     level_length = 0
     _LOGGER.debug("Calculating levels with requested length: %d, fill_unknown: %s", requested_length, fill_unknown)
     try:
-        for state in hass.states.async_all():
-            if state.domain == "sensor" and "rates" in state.attributes:
-                rates = state.attributes.get("rates", [])
-                low_threshold = state.attributes.get("low_threshold", None)
-                high_threshold = state.attributes.get("high_threshold", None)
-                if rates and low_threshold is not None and high_threshold is not None:
-                    if requested_length == 0:
-                        rate_start = rates[0].get("start", "")
-                        rate_end = rates[0].get("end", "")
-                        level_length = math.ceil((rate_end - rate_start).total_seconds() / 60)
-                    else:
-                        level_length = requested_length
-                    levels = []
-                    for rate in rates:
-                        rate_start = rate.get("start", "")
-                        rate_end = rate.get("end", "")
-                        rate_cost = rate.get("cost", 0)
-                        if rate_start and rate_end:
-                            rate_length = math.ceil((rate_end - rate_start).total_seconds() / 60)
-                            for i in range(0, rate_length):
-                                levels.append(rate_cost)
-                    _LOGGER.debug(f"Levels found: {len(levels)}")
-                    # Split levels into chunks of length level_length
-                    if level_length > 0:
-                        for i in range(0, len(levels), level_length):
-                            chunk = levels[i:i+level_length]
-                            if all(val <= low_threshold for val in chunk):
-                                levels_str += "L"
-                            elif all(val < high_threshold for val in chunk):
-                                levels_str += "M"
-                            else:
-                                levels_str += "H"
-                break
+        state = hass.states.get("sensor.electricitypricelevels")
+        if state and "rates" in state.attributes:
+            rates = state.attributes.get("rates", [])
+            low_threshold = state.attributes.get("low_threshold", None)
+            high_threshold = state.attributes.get("high_threshold", None)
+            if rates and low_threshold is not None and high_threshold is not None:
+                if requested_length == 0:
+                    rate_start = rates[0].get("start", "")
+                    rate_end = rates[0].get("end", "")
+                    level_length = math.ceil((rate_end - rate_start).total_seconds() / 60)
+                else:
+                    level_length = requested_length
+                levels = []
+                for rate in rates:
+                    rate_start = rate.get("start", "")
+                    rate_end = rate.get("end", "")
+                    rate_cost = rate.get("cost", 0)
+                    if rate_start and rate_end:
+                        rate_length = math.ceil((rate_end - rate_start).total_seconds() / 60)
+                        for i in range(0, rate_length):
+                            levels.append(rate_cost)
+                _LOGGER.debug(f"Levels found: {len(levels)}")
+                if level_length > 0:
+                    for i in range(0, len(levels), level_length):
+                        chunk = levels[i:i+level_length]
+                        if all(val <= low_threshold for val in chunk):
+                            levels_str += "L"
+                        elif all(val < high_threshold for val in chunk):
+                            levels_str += "M"
+                        else:
+                            levels_str += "H"
     except Exception as e:
         _LOGGER.error(f"Error processing rates: {e}")
         levels_str = ""

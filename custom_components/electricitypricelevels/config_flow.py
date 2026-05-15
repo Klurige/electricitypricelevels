@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 import voluptuous as vol
+from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
 import homeassistant.helpers.config_validation as cv
 
 from homeassistant.config_entries import (
@@ -16,7 +17,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
-from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 
 
@@ -36,13 +36,64 @@ from .const import (
     CONF_GRID_VARIABLE_CREDIT,
     CONF_GRID_ENERGY_TAX,
     CONF_ELECTRICITY_VAT,
+    CONF_EXCLUDE_FROM_RECORDING,
     DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _parse_unit_of_measurement(unit_str: str) -> tuple[str | None, str | None]:
+    """
+    Parse a unit of measurement string into currency and energy unit.
+
+    Expected formats:
+    - "SEK/kWh" -> ("SEK", "kWh")
+    - "EUR/MWh" -> ("EUR", "MWh")
+    - "SEK/kW" -> ("SEK", "kW")
+    - "EUR" -> ("EUR", None)
+    - "kWh" -> (None, "kWh")
+    - "" -> (None, None)
+
+    Args:
+        unit_str: The unit of measurement string to parse
+
+    Returns:
+        A tuple of (currency, energy_unit)
+    """
+    if not unit_str or not isinstance(unit_str, str):
+        return None, None
+
+    unit_str = unit_str.strip()
+
+    # Handle format: "CURRENCY/ENERGY_UNIT"
+    if "/" in unit_str:
+        parts = unit_str.split("/")
+        if len(parts) == 2:
+            currency = parts[0].strip() if parts[0].strip() else None
+            energy_unit = parts[1].strip() if parts[1].strip() else None
+            return currency, energy_unit
+        return None, None
+
+    # Single unit - try to determine if it's currency or energy unit
+    # Common energy units: kWh, MWh, Wh, kW, MW, W
+    # Common currencies are 3 letters (EUR, SEK, NOK, DKK, etc.)
+    common_energy_units = {"kwh", "mwh", "wh", "kw", "mw", "w"}
+
+    if unit_str.lower() in common_energy_units:
+        return None, unit_str
+    elif len(unit_str) == 3 and unit_str.isupper():
+        return unit_str, None
+    else:
+        # Default: treat as energy unit if it contains common prefixes
+        if any(unit_str.lower().endswith(u) for u in common_energy_units):
+            return None, unit_str
+        # Otherwise treat as currency
+        return unit_str, None
+
+
 async def _validate_nordpool_prices_sensor(hass: HomeAssistant, entity_id: str) -> tuple[bool, dict | None]:
-    """Validate the selected Nord Pool prices sensor entity."""
+    """Validate the Nordpool prices sensor by checking if it exists and is available."""
     if not entity_id:
         return False, None
 
@@ -50,20 +101,40 @@ async def _validate_nordpool_prices_sensor(hass: HomeAssistant, entity_id: str) 
 
     if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
         _LOGGER.warning(
-            f"Nordpool sensor '{entity_id}' not found or unavailable."
+            f"Nordpool prices sensor '{entity_id}' not found or unavailable."
         )
         return False, None
 
+    unit_of_measurement = state.attributes.get("unit_of_measurement", "")
+    currency_from_attributes = state.attributes.get("currency", "")
+
+    # Try to parse currency from unit_of_measurement
+    parsed_currency, parsed_unit = _parse_unit_of_measurement(unit_of_measurement)
+
+    # Use parsed currency, or fallback to direct attribute, or use a default
+    final_currency = parsed_currency or currency_from_attributes or "EUR"
+    final_unit = parsed_unit or "MWh"
+
+    _LOGGER.debug(
+        f"Extracted from sensor '{entity_id}': "
+        f"unit_of_measurement='{unit_of_measurement}', "
+        f"parsed_currency='{parsed_currency}', "
+        f"currency_attribute='{currency_from_attributes}', "
+        f"final_currency='{final_currency}', "
+        f"final_unit='{final_unit}'"
+    )
+
     attributes = {
-        "unit_of_measurement": state.attributes.get("unit_of_measurement", ""),
-        "currency": state.attributes.get("currency", ""),
+        "unit_of_measurement": unit_of_measurement,
+        "currency": final_currency,
+        "energy_unit": final_unit,
         "price_divisor": 1 if state.attributes.get("prices_in_cents", False) else 100,
     }
     return True, attributes
 
 
 class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self):
         self.data = {}
@@ -73,7 +144,7 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
             config_entry: ConfigEntry,
     ) -> ElectricityPriceLevelOptionFlowHandler:
-        return ElectricityPriceLevelOptionFlowHandler(config_entry)
+        return ElectricityPriceLevelOptionFlowHandler()
 
     async def async_step_user(
             self, user_input: dict[str, Any] | None = None
@@ -84,6 +155,8 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
             is_valid, attributes = await _validate_nordpool_prices_sensor(self.hass, prices_sensor)
 
             if is_valid and attributes is not None:
+                await self.async_set_unique_id(prices_sensor)
+                self._abort_if_unique_id_configured()
                 self.data.update(user_input)
                 self.data.update(attributes)
                 return await self.async_step_supplier_fees_and_credits()
@@ -93,7 +166,7 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_NORDPOOL_PRICES_SENSOR): EntitySelector(
+                vol.Required(CONF_NORDPOOL_PRICES_SENSOR, default=user_input.get(CONF_NORDPOOL_PRICES_SENSOR) if user_input else vol.UNDEFINED): EntitySelector(
                     EntitySelectorConfig(
                         domain=SENSOR_DOMAIN,
                     )
@@ -126,10 +199,10 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
             step_id="supplier_fees_and_credits",
             data_schema=vol.Schema({
                 vol.Optional(CONF_SUPPLIER_NOTE, default=supplier_note if supplier_note is not None else vol.UNDEFINED): vol.Coerce(str),
-                vol.Optional(CONF_SUPPLIER_FIXED_FEE, default=supplier_fixed_fee if supplier_fixed_fee is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
-                vol.Optional(CONF_SUPPLIER_VARIABLE_FEE, default=supplier_variable_fee if supplier_variable_fee is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float),cv.positive_float),
-                vol.Optional(CONF_SUPPLIER_FIXED_CREDIT, default=supplier_fixed_credit if supplier_fixed_credit is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float),cv.positive_float),
-                vol.Optional(CONF_SUPPLIER_VARIABLE_CREDIT, default=supplier_variable_credit if supplier_variable_credit is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float),cv.positive_float),
+                vol.Optional(CONF_SUPPLIER_FIXED_FEE, default=supplier_fixed_fee if supplier_fixed_fee is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                vol.Optional(CONF_SUPPLIER_VARIABLE_FEE, default=supplier_variable_fee if supplier_variable_fee is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float),vol.Range(min=0)),
+                vol.Optional(CONF_SUPPLIER_FIXED_CREDIT, default=supplier_fixed_credit if supplier_fixed_credit is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float),vol.Range(min=0)),
+                vol.Optional(CONF_SUPPLIER_VARIABLE_CREDIT, default=supplier_variable_credit if supplier_variable_credit is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float),vol.Range(min=0)),
             }),
             errors=errors
         )
@@ -157,10 +230,10 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
             step_id="grid_fees_and_credits",
             data_schema=vol.Schema({
                 vol.Optional(CONF_GRID_NOTE, default=grid_note if grid_note is not None else vol.UNDEFINED): vol.Coerce(str),
-                vol.Optional(CONF_GRID_FIXED_FEE, default=grid_fixed_fee if grid_fixed_fee is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
-                vol.Optional(CONF_GRID_VARIABLE_FEE, default=grid_variable_fee if grid_variable_fee is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float),cv.positive_float),
-                vol.Optional(CONF_GRID_FIXED_CREDIT, default=grid_fixed_credit if grid_fixed_credit is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float),cv.positive_float),
-                vol.Optional(CONF_GRID_VARIABLE_CREDIT, default=grid_variable_credit if grid_variable_credit is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float),cv.positive_float),
+                vol.Optional(CONF_GRID_FIXED_FEE, default=grid_fixed_fee if grid_fixed_fee is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                vol.Optional(CONF_GRID_VARIABLE_FEE, default=grid_variable_fee if grid_variable_fee is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float),vol.Range(min=0)),
+                vol.Optional(CONF_GRID_FIXED_CREDIT, default=grid_fixed_credit if grid_fixed_credit is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float),vol.Range(min=0)),
+                vol.Optional(CONF_GRID_VARIABLE_CREDIT, default=grid_variable_credit if grid_variable_credit is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float),vol.Range(min=0)),
             }),
             errors=errors
         )
@@ -181,8 +254,8 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="taxes_and_vat",
             data_schema=vol.Schema({
-                vol.Optional(CONF_GRID_ENERGY_TAX, default=grid_energy_tax if grid_energy_tax is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
-                vol.Optional(CONF_ELECTRICITY_VAT, default=electricity_vat if electricity_vat is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float), cv.positive_float),
+                vol.Optional(CONF_GRID_ENERGY_TAX, default=grid_energy_tax if grid_energy_tax is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                vol.Optional(CONF_ELECTRICITY_VAT, default=electricity_vat if electricity_vat is not None else vol.UNDEFINED, description={"suffix": "%"}): vol.All(vol.Coerce(float), vol.Range(min=0)),
             }),
             errors=errors
         )
@@ -208,6 +281,10 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
                     data=self.data,
                     options={ # Initialize options with data from main flow
                         CONF_NORDPOOL_PRICES_SENSOR: self.data[CONF_NORDPOOL_PRICES_SENSOR],
+                        "unit_of_measurement": self.data.get("unit_of_measurement", ""),
+                        "currency": self.data.get("currency", ""),
+                        "energy_unit": self.data.get("energy_unit", ""),
+                        "price_divisor": self.data.get("price_divisor", 100),
                         CONF_SUPPLIER_NOTE: self.data.get(CONF_SUPPLIER_NOTE),
                         CONF_SUPPLIER_FIXED_FEE: self.data.get(CONF_SUPPLIER_FIXED_FEE),
                         CONF_SUPPLIER_VARIABLE_FEE: self.data.get(CONF_SUPPLIER_VARIABLE_FEE),
@@ -222,6 +299,7 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
                         CONF_GRID_ENERGY_TAX: self.data.get(CONF_GRID_ENERGY_TAX),
                         CONF_LOW_THRESHOLD: self.data.get(CONF_LOW_THRESHOLD),
                         CONF_HIGH_THRESHOLD: self.data.get(CONF_HIGH_THRESHOLD),
+                        CONF_EXCLUDE_FROM_RECORDING: True,
                     }
                 )
 
@@ -231,23 +309,20 @@ class ElectricityPriceLevelFlowHandler(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="thresholds",
             data_schema=vol.Schema({
-                vol.Optional(CONF_LOW_THRESHOLD, default=low_threshold_val if low_threshold_val is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
-                vol.Optional(CONF_HIGH_THRESHOLD, default=high_threshold_val if high_threshold_val is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), cv.positive_float),
+                vol.Optional(CONF_LOW_THRESHOLD, default=low_threshold_val if low_threshold_val is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), vol.Range(min=0)),
+                vol.Optional(CONF_HIGH_THRESHOLD, default=high_threshold_val if high_threshold_val is not None else vol.UNDEFINED, description={"suffix": unit_of_measurement}): vol.All(vol.Coerce(float), vol.Range(min=0)),
             }),
             errors=errors
         )
 
 
 class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.current_options = dict(config_entry.options)
-        self.unit_of_measurement = "" # Will be populated in async_step_init
 
     async def async_step_init(
             self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors = {}
+        self.current_options = dict(self.config_entry.options)
         # Determine unit_of_measurement based on currently saved (or about to be saved) prices sensor
         # This is primarily for display in the form. Validation of new sensor happens below.
         current_prices_sensor = self.current_options.get(CONF_NORDPOOL_PRICES_SENSOR, "")
@@ -268,7 +343,7 @@ class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
             if not is_valid_sensor:
                 errors[CONF_NORDPOOL_PRICES_SENSOR] = "invalid_sensor"
             else:
-                # Sensor is valid, update unit_of_measurement based on potentially new valid sensor
+                # Prices sensor is valid, update unit_of_measurement based on potentially new valid sensor
                 self.unit_of_measurement = sensor_attributes.get("unit_of_measurement", "") if sensor_attributes else ""
 
                 # Validate thresholds
@@ -281,10 +356,12 @@ class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
                 if not errors:
                     # All validations passed, create/update the options entry
                     self.current_options.update(user_input)
-                    # Ensure price_divisor and currency are updated if sensor changed
+                    # Ensure unit_of_measurement, currency, and energy_unit are updated if sensor changed
                     if sensor_attributes:
-                        self.current_options["price_divisor"] = sensor_attributes["price_divisor"]
-                        self.current_options["currency"] = sensor_attributes["currency"]
+                        self.current_options["unit_of_measurement"] = sensor_attributes.get("unit_of_measurement", "")
+                        self.current_options["currency"] = sensor_attributes.get("currency", "")
+                        self.current_options["energy_unit"] = sensor_attributes.get("energy_unit", "")
+                        self.current_options["price_divisor"] = sensor_attributes.get("price_divisor", 100)
                     return self.async_create_entry(title="", data=self.current_options)
 
         # Populate schema with current/suggested values
@@ -301,12 +378,12 @@ class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
                 CONF_LOW_THRESHOLD,
                 description={"suggested_value": self.current_options.get(CONF_LOW_THRESHOLD), "suffix": self.unit_of_measurement},
                 default=self.current_options.get(CONF_LOW_THRESHOLD)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_HIGH_THRESHOLD,
                 description={"suggested_value": self.current_options.get(CONF_HIGH_THRESHOLD), "suffix": self.unit_of_measurement},
                 default=self.current_options.get(CONF_HIGH_THRESHOLD)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_SUPPLIER_NOTE,
                 description={"suggested_value": self.current_options.get(CONF_SUPPLIER_NOTE)},
@@ -316,22 +393,22 @@ class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
                 CONF_SUPPLIER_FIXED_FEE,
                 description={"suggested_value": self.current_options.get(CONF_SUPPLIER_FIXED_FEE), "suffix": self.unit_of_measurement},
                 default=self.current_options.get(CONF_SUPPLIER_FIXED_FEE)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_SUPPLIER_VARIABLE_FEE,
                 description={"suggested_value": self.current_options.get(CONF_SUPPLIER_VARIABLE_FEE), "suffix": "%"},
                 default=self.current_options.get(CONF_SUPPLIER_VARIABLE_FEE)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_SUPPLIER_FIXED_CREDIT,
                 description={"suggested_value": self.current_options.get(CONF_SUPPLIER_FIXED_CREDIT), "suffix": self.unit_of_measurement},
                 default=self.current_options.get(CONF_SUPPLIER_FIXED_CREDIT)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_SUPPLIER_VARIABLE_CREDIT,
                 description={"suggested_value": self.current_options.get(CONF_SUPPLIER_VARIABLE_CREDIT), "suffix": "%"},
                 default=self.current_options.get(CONF_SUPPLIER_VARIABLE_CREDIT)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_GRID_NOTE,
                 description={"suggested_value": self.current_options.get(CONF_GRID_NOTE)},
@@ -341,32 +418,36 @@ class ElectricityPriceLevelOptionFlowHandler(OptionsFlow):
                 CONF_GRID_FIXED_FEE,
                 description={"suggested_value": self.current_options.get(CONF_GRID_FIXED_FEE), "suffix": self.unit_of_measurement},
                 default=self.current_options.get(CONF_GRID_FIXED_FEE)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_GRID_VARIABLE_FEE,
                 description={"suggested_value": self.current_options.get(CONF_GRID_VARIABLE_FEE), "suffix": "%"},
                 default=self.current_options.get(CONF_GRID_VARIABLE_FEE)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_GRID_FIXED_CREDIT,
                 description={"suggested_value": self.current_options.get(CONF_GRID_FIXED_CREDIT), "suffix": self.unit_of_measurement},
                 default=self.current_options.get(CONF_GRID_FIXED_CREDIT)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_GRID_VARIABLE_CREDIT,
                 description={"suggested_value": self.current_options.get(CONF_GRID_VARIABLE_CREDIT), "suffix": "%"},
                 default=self.current_options.get(CONF_GRID_VARIABLE_CREDIT)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_GRID_ENERGY_TAX,
                 description={"suggested_value": self.current_options.get(CONF_GRID_ENERGY_TAX), "suffix": self.unit_of_measurement},
                 default=self.current_options.get(CONF_GRID_ENERGY_TAX)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             vol.Optional(
                 CONF_ELECTRICITY_VAT,
                 description={"suggested_value": self.current_options.get(CONF_ELECTRICITY_VAT), "suffix": "%"},
                 default=self.current_options.get(CONF_ELECTRICITY_VAT)
-            ): vol.All(vol.Coerce(float), cv.positive_float),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+            vol.Optional(
+                CONF_EXCLUDE_FROM_RECORDING,
+                default=self.current_options.get(CONF_EXCLUDE_FROM_RECORDING, True)
+            ): cv.boolean,
         }
 
         return self.async_show_form(

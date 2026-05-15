@@ -41,6 +41,10 @@
           "high_threshold": "Övre gränsvärde."
         }
       }
+    },
+    "error": {
+      "invalid_sensor": "Den valda sensorn är inte tillgänglig eller giltig.",
+      "low_threshold_higher_than_high_threshold": "Det nedre gränsvärdet måste vara lägre än det övre gränsvärdet."
     }
   },
   "options": {
@@ -62,7 +66,8 @@
           "grid_fixed_credit": "Elnätsintäkt per enhet",
           "grid_variable_credit": "Elnätsintäkt i procent",
           "grid_energy_tax": "Energiskatt per enhet",
-          "electricity_vat": "Elmoms i procent"
+          "electricity_vat": "Elmoms i procent",
+          "exclude_from_recording": "Spara inte i Home Assistant historik"
         }
       }
     }

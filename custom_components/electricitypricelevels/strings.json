@@ -41,6 +41,10 @@
           "high_threshold": "Upper threshold."
         }
       }
+    },
+    "error": {
+      "invalid_sensor": "The selected sensor is not available or not valid.",
+      "low_threshold_higher_than_high_threshold": "The lower threshold must be less than the upper threshold."
     }
   },
   "options": {
@@ -62,7 +66,8 @@
           "grid_fixed_credit": "Grid credit per unit",
           "grid_variable_credit": "Grid credit in percentage",
           "grid_energy_tax": "Energy tax per unit",
-          "electricity_vat": "Electricity VAT in percentage"
+          "electricity_vat": "Electricity VAT in percentage",
+          "exclude_from_recording": "Do not record in Home Assistant history"
         }
       }
     }

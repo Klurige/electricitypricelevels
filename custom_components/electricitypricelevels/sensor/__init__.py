@@ -59,7 +59,10 @@ async def async_setup_entry(
         return
 
     # Create and start the coordinator
-    coordinator = NordpoolDataCoordinator(hass, nordpool_config_entry_id_to_use, levels_sensor.async_update_data)
+    # Pass the currency from config entry options (with fallback to SEK)
+    currency_from_config = entry.options.get("currency", "") or "EUR"
+    _LOGGER.info(f"Creating coordinator with currency='{currency_from_config}' from entry.options")
+    coordinator = NordpoolDataCoordinator(hass, nordpool_config_entry_id_to_use, levels_sensor.async_update_data, currency_from_config)
     coordinator.start()
 
     @callback
