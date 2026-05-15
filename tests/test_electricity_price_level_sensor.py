@@ -80,6 +80,9 @@ def mock_hass():
     hass.states = MagicMock()
     mock_nordpool_state = MagicMock(spec=State)
     mock_nordpool_state.state = "1.23" # A valid number state
+    mock_nordpool_state.attributes = {
+        "unit_of_measurement": "EUR/MWh",
+    }
     hass.states.get = MagicMock(return_value=mock_nordpool_state)
     return hass
 

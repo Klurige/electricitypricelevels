@@ -44,7 +44,7 @@ async def test_initialization(coordinator):
     """Test coordinator initialization."""
     assert coordinator.nordpool_config_entry_id == "test_config_entry_id"
     assert coordinator._is_running is False
-    assert coordinator._currency == "EUR"
+    assert coordinator._currency is None
     assert coordinator._data_for_current_hass_date is None
     assert coordinator._date_of_current_data is None
     assert coordinator._data_for_next_hass_date is None
@@ -81,7 +81,7 @@ async def test_execute_nordpool_call_success(coordinator, mock_hass):
     status, payload = await coordinator._execute_nordpool_call_logic(test_date)
 
     assert status == "SUCCESS_DATA"
-    assert payload["currency"] == "EUR"
+    assert payload["currency"] is None
     assert payload["raw"] == mock_service_response["SE3"]
 
     mock_hass.services.async_call.assert_called_once_with(

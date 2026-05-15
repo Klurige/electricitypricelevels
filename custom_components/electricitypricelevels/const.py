@@ -23,3 +23,41 @@ CONF_GRID_VARIABLE_CREDIT = "grid_variable_credit"
 CONF_GRID_ENERGY_TAX = "grid_energy_tax"
 CONF_ELECTRICITY_VAT = "electricity_vat"
 CONF_EXCLUDE_FROM_RECORDING = "exclude_from_recording"
+
+
+def parse_unit_of_measurement(unit_str: str) -> tuple[str | None, str | None]:
+    """
+    Parse a unit of measurement string into currency and energy unit.
+
+    Expected formats:
+    - "SEK/kWh" -> ("SEK", "kWh")
+    - "EUR/MWh" -> ("EUR", "MWh")
+    - "NOK/kWh" -> ("NOK", "kWh")
+    - "" -> (None, None)
+
+    Returns:
+        A tuple of (currency, energy_unit)
+    """
+    if not unit_str or not isinstance(unit_str, str):
+        return None, None
+
+    unit_str = unit_str.strip()
+
+    if "/" in unit_str:
+        parts = unit_str.split("/")
+        if len(parts) == 2:
+            currency = parts[0].strip() if parts[0].strip() else None
+            energy_unit = parts[1].strip() if parts[1].strip() else None
+            return currency, energy_unit
+        return None, None
+
+    common_energy_units = {"kwh", "mwh", "wh", "kw", "mw", "w"}
+
+    if unit_str.lower() in common_energy_units:
+        return None, unit_str
+    elif len(unit_str) == 3 and unit_str.isupper():
+        return unit_str, None
+    else:
+        if any(unit_str.lower().endswith(u) for u in common_energy_units):
+            return None, unit_str
+        return unit_str, None

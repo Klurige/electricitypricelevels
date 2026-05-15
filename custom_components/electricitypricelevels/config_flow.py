@@ -38,58 +38,15 @@ from .const import (
     CONF_ELECTRICITY_VAT,
     CONF_EXCLUDE_FROM_RECORDING,
     DOMAIN,
+    parse_unit_of_measurement,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _parse_unit_of_measurement(unit_str: str) -> tuple[str | None, str | None]:
-    """
-    Parse a unit of measurement string into currency and energy unit.
-
-    Expected formats:
-    - "SEK/kWh" -> ("SEK", "kWh")
-    - "EUR/MWh" -> ("EUR", "MWh")
-    - "SEK/kW" -> ("SEK", "kW")
-    - "EUR" -> ("EUR", None)
-    - "kWh" -> (None, "kWh")
-    - "" -> (None, None)
-
-    Args:
-        unit_str: The unit of measurement string to parse
-
-    Returns:
-        A tuple of (currency, energy_unit)
-    """
-    if not unit_str or not isinstance(unit_str, str):
-        return None, None
-
-    unit_str = unit_str.strip()
-
-    # Handle format: "CURRENCY/ENERGY_UNIT"
-    if "/" in unit_str:
-        parts = unit_str.split("/")
-        if len(parts) == 2:
-            currency = parts[0].strip() if parts[0].strip() else None
-            energy_unit = parts[1].strip() if parts[1].strip() else None
-            return currency, energy_unit
-        return None, None
-
-    # Single unit - try to determine if it's currency or energy unit
-    # Common energy units: kWh, MWh, Wh, kW, MW, W
-    # Common currencies are 3 letters (EUR, SEK, NOK, DKK, etc.)
-    common_energy_units = {"kwh", "mwh", "wh", "kw", "mw", "w"}
-
-    if unit_str.lower() in common_energy_units:
-        return None, unit_str
-    elif len(unit_str) == 3 and unit_str.isupper():
-        return unit_str, None
-    else:
-        # Default: treat as energy unit if it contains common prefixes
-        if any(unit_str.lower().endswith(u) for u in common_energy_units):
-            return None, unit_str
-        # Otherwise treat as currency
-        return unit_str, None
+    """Delegate to shared implementation in const.py."""
+    return parse_unit_of_measurement(unit_str)
 
 
 async def _validate_nordpool_prices_sensor(hass: HomeAssistant, entity_id: str) -> tuple[bool, dict | None]:
@@ -128,7 +85,7 @@ async def _validate_nordpool_prices_sensor(hass: HomeAssistant, entity_id: str) 
         "unit_of_measurement": unit_of_measurement,
         "currency": final_currency,
         "energy_unit": final_unit,
-        "price_divisor": 1 if state.attributes.get("prices_in_cents", False) else 100,
+        "price_divisor": 100 if state.attributes.get("prices_in_cents", False) else 1,
     }
     return True, attributes
 

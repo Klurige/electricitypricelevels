@@ -45,6 +45,7 @@ from ..const import (
     CONF_GRID_ENERGY_TAX,
     CONF_ELECTRICITY_VAT,
     CONF_EXCLUDE_FROM_RECORDING,
+    parse_unit_of_measurement,
 )
 
 
@@ -76,11 +77,10 @@ class ElectricityPriceLevelsSensor(SensorEntity):
 
         self._nordpool_prices_sensor = entry.options.get(CONF_NORDPOOL_PRICES_SENSOR, "")
 
-        # Get already-parsed currency and energy unit from config options
-        # These were extracted in config_flow when sensor was selected
-        self._currency = entry.options.get("currency", "") or "EUR"
-        self._unit = entry.options.get("energy_unit", "") or "MWh"
-        self._unit_of_measurement = entry.options.get("unit_of_measurement", "") or f"{self._currency}/{self._unit}"
+        # Initial currency/unit from config (may be empty for migrated entries)
+        self._currency = entry.options.get("currency", "") or None
+        self._unit = entry.options.get("energy_unit", "") or None
+        self._unit_of_measurement = entry.options.get("unit_of_measurement", "") or None
         price_divisor = entry.options.get("price_divisor")
         self._price_divisor = price_divisor if price_divisor is not None else 1
 
@@ -135,6 +135,48 @@ class ElectricityPriceLevelsSensor(SensorEntity):
 
         _LOGGER.debug("ElectricityPriceLevelSensor initialized for prices sensor %s", self._nordpool_prices_sensor)
 
+    def _update_units_from_nordpool_sensor(self, state=None):
+        """Read unit_of_measurement from the Nord Pool sensor and update currency/unit."""
+        if state is None and self.hass:
+            state = self.hass.states.get(self._nordpool_prices_sensor)
+        if not state or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return
+
+        unit_of_measurement = state.attributes.get("unit_of_measurement", "")
+        if not unit_of_measurement:
+            return
+
+        parsed_currency, parsed_unit = parse_unit_of_measurement(unit_of_measurement)
+        currency_attr = state.attributes.get("currency", "")
+
+        new_currency = parsed_currency or currency_attr or None
+        new_unit = parsed_unit or None
+
+        if new_currency and new_currency != self._currency:
+            _LOGGER.info(f"Updated currency from Nord Pool sensor: {self._currency} -> {new_currency}")
+            self._currency = new_currency
+        elif not self._currency and new_currency:
+            self._currency = new_currency
+
+        if new_unit and new_unit != self._unit:
+            _LOGGER.info(f"Updated energy unit from Nord Pool sensor: {self._unit} -> {new_unit}")
+            self._unit = new_unit
+        elif not self._unit and new_unit:
+            self._unit = new_unit
+
+        if self._currency and self._unit:
+            self._unit_of_measurement = f"{self._currency}/{self._unit}"
+        elif self._currency:
+            self._unit_of_measurement = self._currency
+
+        # Update price_divisor based on prices_in_cents attribute
+        prices_in_cents = state.attributes.get("prices_in_cents")
+        if prices_in_cents is not None:
+            new_divisor = 100 if prices_in_cents else 1
+            if new_divisor != self._price_divisor:
+                _LOGGER.info(f"Updated price_divisor from Nord Pool sensor: {self._price_divisor} -> {new_divisor} (prices_in_cents={prices_in_cents})")
+                self._price_divisor = new_divisor
+
     async def async_added_to_hass(self) -> None:
         """
         Run when entity about to be added to Home Assistant.
@@ -149,6 +191,10 @@ class ElectricityPriceLevelsSensor(SensorEntity):
         _LOGGER.info(f"async_added_to_hass called. Nordpool trigger entity: {self._nordpool_trigger_entity_id}")
 
         if self._nordpool_trigger_entity_id:
+            # Read currency/unit from Nord Pool sensor if available
+            initial_trigger_state = self.hass.states.get(self._nordpool_trigger_entity_id)
+            self._update_units_from_nordpool_sensor(initial_trigger_state)
+
             self.async_on_remove(
                 async_track_state_change_event(
                     self.hass, [self._nordpool_trigger_entity_id], self._handle_nordpool_trigger_update
@@ -156,8 +202,6 @@ class ElectricityPriceLevelsSensor(SensorEntity):
             )
             _LOGGER.info(f"Registered listener for {self._nordpool_trigger_entity_id}")
 
-            # Optionally, trigger an initial update based on the current state of the tracked sensor
-            initial_trigger_state = self.hass.states.get(self._nordpool_trigger_entity_id)
             if initial_trigger_state and initial_trigger_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
                 # Only refresh if we have rates data, otherwise wait for coordinator to send it
                 if self._rates:
@@ -189,6 +233,9 @@ class ElectricityPriceLevelsSensor(SensorEntity):
                 "Sensor state will not be refreshed by this trigger."
             )
             return
+
+        # Update currency/unit from sensor attributes on every state change
+        self._update_units_from_nordpool_sensor(new_state)
 
         _LOGGER.debug(
             f"Tracked Nordpool sensor {self._nordpool_trigger_entity_id} changed to {new_state.state}. "
@@ -379,16 +426,16 @@ class ElectricityPriceLevelsSensor(SensorEntity):
         """
         _LOGGER.info(f"async_update_data CALLED with data. Keys: {list(nordpool_data.keys() if nordpool_data else [])}, Raw entries: {len(nordpool_data.get('raw', [])) if nordpool_data else 0}")
         try:
-            # Use the energy unit that was parsed from configuration
-            # If not set, default to MWh
-            if not self._unit:
-                self._unit = "MWh"
+            # Attempt to read units from the Nord Pool sensor at data update time
+            self._update_units_from_nordpool_sensor()
 
-            # Update currency from nordpool data if provided and different
-            new_currency = nordpool_data.get("currency")
-            if new_currency and self._currency != new_currency:
-                self._currency = new_currency
-                _LOGGER.debug(f"Updated currency from nordpool data: {self._currency}")
+            # Fallback defaults if Nord Pool sensor wasn't readable
+            if not self._unit:
+                self._unit = "kWh"
+            if not self._currency:
+                new_currency = nordpool_data.get("currency")
+                if new_currency:
+                    self._currency = new_currency
 
             # Ensure unit_of_measurement is set for the property
             if self._currency and self._unit:
@@ -414,14 +461,14 @@ class ElectricityPriceLevelsSensor(SensorEntity):
                     start_local = start_local.astimezone(local_tz)
                     end_local = end_local.astimezone(local_tz)
 
-                    price_mwh = entry_data["price"]
+                    raw_price = entry_data["price"]
 
-                    if price_mwh is not None:
-                        # Convert from source unit to kWh using configured energy unit
-                        kwh_divisor = {"MWh": 1000.0, "kWh": 1.0, "Wh": 0.001}.get(self._unit, 1000.0)
-                        price_kwh = price_mwh / kwh_divisor / self._price_divisor
+                    if raw_price is not None:
+                        # Convert from source unit to kWh using detected energy unit
+                        kwh_divisor = {"MWh": 1000.0, "kWh": 1.0, "Wh": 0.001}.get(self._unit, 1.0)
+                        price_kwh = raw_price / kwh_divisor / self._price_divisor
 
-                        _LOGGER.debug(f"Processing entry: start={start_local}, end={end_local}, price_mwh={price_mwh}, price_kwh={price_kwh}")
+                        _LOGGER.debug(f"Processing entry: start={start_local}, end={end_local}, raw_price={raw_price}, price_kwh={price_kwh}, unit={self._unit}, divisor={self._price_divisor}")
                         processed_for_ranking.append({
                             "start": start_local,
                             "end": end_local,

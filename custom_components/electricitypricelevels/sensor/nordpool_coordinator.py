@@ -19,8 +19,8 @@ class NordpoolDataCoordinator:
         self._current_schedule_state: list[str] = ["INITIALIZING"]
         self._is_running = False
 
-        # Initialize currency from config if provided
-        self._currency: str | None = currency if currency else "EUR"
+        # Initialize currency from config if provided (may be None for migrated entries)
+        self._currency: str | None = currency if currency else None
         self._data_for_current_hass_date: list | None = None # Raw price list for current HASS date
         self._date_of_current_data: date | None = None       # The HASS date for which _data_for_current_hass_date is valid
 
