@@ -1,12 +1,9 @@
 """Tests for the nordpool coordinator."""
 import datetime
-from unittest.mock import patch, MagicMock, AsyncMock, call
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
-from homeassistant.util import dt as dt_util
 
 from custom_components.electricitypricelevels.sensor.nordpool_coordinator import (
     NordpoolDataCoordinator,
@@ -47,7 +44,7 @@ async def test_initialization(coordinator):
     """Test coordinator initialization."""
     assert coordinator.nordpool_config_entry_id == "test_config_entry_id"
     assert coordinator._is_running is False
-    assert coordinator._currency is None
+    assert coordinator._currency == "EUR"
     assert coordinator._data_for_current_hass_date is None
     assert coordinator._date_of_current_data is None
     assert coordinator._data_for_next_hass_date is None
@@ -81,11 +78,6 @@ async def test_execute_nordpool_call_success(coordinator, mock_hass):
 
     mock_hass.services.async_call.return_value = mock_service_response
 
-    # Mock currency entity state
-    mock_state = MagicMock()
-    mock_state.state = "EUR"
-    mock_hass.states.get.return_value = mock_state
-
     status, payload = await coordinator._execute_nordpool_call_logic(test_date)
 
     assert status == "SUCCESS_DATA"
@@ -100,12 +92,10 @@ async def test_execute_nordpool_call_success(coordinator, mock_hass):
         return_response=True
     )
 
-    mock_hass.states.get.assert_called_once_with("sensor.nord_pool_se3_currency")
-
-
 @pytest.mark.asyncio
 async def test_execute_nordpool_call_no_currency(coordinator, mock_hass):
-    """Test Nordpool service call with no currency entity."""
+    """Test Nordpool service call when coordinator has no currency configured."""
+    coordinator._currency = None
     test_date = datetime.date(2025, 8, 9)
     mock_service_response = {
         "SE3": [
@@ -114,8 +104,6 @@ async def test_execute_nordpool_call_no_currency(coordinator, mock_hass):
     }
 
     mock_hass.services.async_call.return_value = mock_service_response
-    mock_hass.states.get.return_value = None
-
     status, payload = await coordinator._execute_nordpool_call_logic(test_date)
 
     assert status == "SUCCESS_DATA"
@@ -208,85 +196,93 @@ async def test_send_updated_data_stale_dates(coordinator, mock_callback):
 
 
 @pytest.mark.asyncio
-async def test_midnight_rollover_direct(coordinator):
-    """Test midnight rollover of data directly."""
-    # Set up test data - yesterday's and today's data
-    coordinator._data_for_current_hass_date = ["data_for_yesterday"]
+async def test_trigger_rollover_promotes_next_day_data(coordinator):
+    """Test rollover behavior inside the trigger method."""
+    coordinator._is_running = True
+    coordinator._data_for_current_hass_date = ["yesterday_data"]
     coordinator._date_of_current_data = datetime.date(2025, 8, 9)
-    coordinator._data_for_next_hass_date = ["data_for_today"]
+    coordinator._data_for_next_hass_date = ["today_data"]
     coordinator._date_of_next_data = datetime.date(2025, 8, 10)
 
-    # Directly simulate the midnight rollover
-    coordinator._data_for_current_hass_date = coordinator._data_for_next_hass_date
-    coordinator._date_of_current_data = coordinator._date_of_next_data
+    with patch(
+        "custom_components.electricitypricelevels.sensor.nordpool_coordinator.datetime"
+    ) as mock_datetime, patch(
+        "custom_components.electricitypricelevels.sensor.nordpool_coordinator.async_call_later",
+        return_value=lambda: None,
+    ), patch.object(
+        coordinator,
+        "_execute_nordpool_call_logic",
+        new=AsyncMock(return_value=("SUCCESS_DATA", {"currency": "EUR", "raw": ["tomorrow_data"]})),
+    ) as mock_execute, patch.object(
+        coordinator,
+        "_send_updated_data_to_sensor",
+        new=AsyncMock(),
+    ):
+        mock_datetime.now.return_value = datetime.datetime(2025, 8, 10, 0, 5)
+        await coordinator._trigger_and_reschedule_nordpool()
+
+    assert coordinator._data_for_current_hass_date == ["today_data"]
+    assert coordinator._date_of_current_data == datetime.date(2025, 8, 10)
+    assert coordinator._data_for_next_hass_date == ["tomorrow_data"]
+    assert coordinator._date_of_next_data == datetime.date(2025, 8, 11)
+    mock_execute.assert_awaited_once_with(datetime.date(2025, 8, 11))
+
+
+@pytest.mark.asyncio
+async def test_trigger_fetches_today_when_missing(coordinator):
+    """Test that missing current day data triggers a fetch for today."""
+    coordinator._is_running = True
+    coordinator._data_for_current_hass_date = None
+    coordinator._date_of_current_data = None
+
+    with patch(
+        "custom_components.electricitypricelevels.sensor.nordpool_coordinator.datetime"
+    ) as mock_datetime, patch(
+        "custom_components.electricitypricelevels.sensor.nordpool_coordinator.async_call_later",
+        return_value=lambda: None,
+    ), patch.object(
+        coordinator,
+        "_execute_nordpool_call_logic",
+        new=AsyncMock(return_value=("SUCCESS_DATA", {"currency": "EUR", "raw": ["today_data"]})),
+    ) as mock_execute, patch.object(
+        coordinator,
+        "_send_updated_data_to_sensor",
+        new=AsyncMock(),
+    ):
+        mock_datetime.now.return_value = datetime.datetime(2025, 8, 10, 10, 0)
+        await coordinator._trigger_and_reschedule_nordpool()
+
+    mock_execute.assert_awaited_once_with(datetime.date(2025, 8, 10))
+    assert coordinator._data_for_current_hass_date == ["today_data"]
+    assert coordinator._date_of_current_data == datetime.date(2025, 8, 10)
+
+
+@pytest.mark.asyncio
+async def test_trigger_fetches_tomorrow_when_missing(coordinator):
+    """Test that missing next day data triggers a fetch for tomorrow."""
+    coordinator._is_running = True
+    coordinator._data_for_current_hass_date = ["today_data"]
+    coordinator._date_of_current_data = datetime.date(2025, 8, 10)
     coordinator._data_for_next_hass_date = None
     coordinator._date_of_next_data = None
 
-    # Verify the rollover was done correctly
-    assert coordinator._data_for_current_hass_date == ["data_for_today"]
-    assert coordinator._date_of_current_data == datetime.date(2025, 8, 10)
-    assert coordinator._data_for_next_hass_date is None
-    assert coordinator._date_of_next_data is None
+    with patch(
+        "custom_components.electricitypricelevels.sensor.nordpool_coordinator.datetime"
+    ) as mock_datetime, patch(
+        "custom_components.electricitypricelevels.sensor.nordpool_coordinator.async_call_later",
+        return_value=lambda: None,
+    ), patch.object(
+        coordinator,
+        "_execute_nordpool_call_logic",
+        new=AsyncMock(return_value=("SUCCESS_DATA", {"currency": "EUR", "raw": ["tomorrow_data"]})),
+    ) as mock_execute, patch.object(
+        coordinator,
+        "_send_updated_data_to_sensor",
+        new=AsyncMock(),
+    ):
+        mock_datetime.now.return_value = datetime.datetime(2025, 8, 10, 14, 0)
+        await coordinator._trigger_and_reschedule_nordpool()
 
-
-@pytest.mark.asyncio
-async def test_fetch_current_day_data_direct(coordinator):
-    """Test fetching current day data directly."""
-    with patch.object(coordinator, "_execute_nordpool_call_logic") as mock_execute:
-        # Configure for missing current day data
-        coordinator._data_for_current_hass_date = None
-        coordinator._date_of_current_data = None
-
-        # Set up mock response for today's data
-        test_date = datetime.date(2025, 8, 10)
-        mock_execute.return_value = ("SUCCESS_DATA", {
-            "currency": "EUR",
-            "raw": ["today_data"]
-        })
-
-        # Call execute directly with the expected date
-        status, payload = await coordinator._execute_nordpool_call_logic(test_date)
-
-        # Manually update the coordinator as it would happen in the real code
-        coordinator._data_for_current_hass_date = payload["raw"]
-        coordinator._date_of_current_data = test_date
-        coordinator._currency = payload["currency"]
-
-        # Verify the expected changes
-        mock_execute.assert_called_once_with(test_date)
-        assert coordinator._data_for_current_hass_date == ["today_data"]
-        assert coordinator._date_of_current_data == datetime.date(2025, 8, 10)
-        assert coordinator._currency == "EUR"
-
-
-@pytest.mark.asyncio
-async def test_fetch_next_day_data_direct(coordinator):
-    """Test fetching next day data directly."""
-    with patch.object(coordinator, "_execute_nordpool_call_logic") as mock_execute:
-        # Configure with today's data but no tomorrow's data
-        current_date = datetime.date(2025, 8, 10)
-        coordinator._data_for_current_hass_date = ["today_data"]
-        coordinator._date_of_current_data = current_date
-        coordinator._data_for_next_hass_date = None
-        coordinator._date_of_next_data = None
-
-        # Set up mock for tomorrow's data
-        tomorrow = current_date + datetime.timedelta(days=1)
-        mock_execute.return_value = ("SUCCESS_DATA", {
-            "currency": "EUR",
-            "raw": ["tomorrow_data"]
-        })
-
-        # Call execute directly with tomorrow's date
-        status, payload = await coordinator._execute_nordpool_call_logic(tomorrow)
-
-        # Manually update the coordinator as it would happen in the real code
-        coordinator._data_for_next_hass_date = payload["raw"]
-        coordinator._date_of_next_data = tomorrow
-        coordinator._currency = payload["currency"]
-
-        # Verify the expected changes
-        mock_execute.assert_called_once_with(tomorrow)
-        assert coordinator._data_for_next_hass_date == ["tomorrow_data"]
-        assert coordinator._date_of_next_data == datetime.date(2025, 8, 11)
-        assert coordinator._currency == "EUR"
+    mock_execute.assert_awaited_once_with(datetime.date(2025, 8, 11))
+    assert coordinator._data_for_next_hass_date == ["tomorrow_data"]
+    assert coordinator._date_of_next_data == datetime.date(2025, 8, 11)

@@ -1,22 +1,7 @@
 """Tests for the util module."""
 import datetime
-from unittest.mock import patch
-import pytest
-from homeassistant.util import dt as dt_util
 
 from custom_components.electricitypricelevels.util import generate_level_pattern
-
-
-@pytest.fixture
-def mock_datetime():
-    """Mock datetime for consistent test execution."""
-    base_dt = datetime.datetime(2025, 8, 9, 10, 0, 0, tzinfo=datetime.timezone.utc)
-
-    def mock_parse_datetime(date_str):
-        return datetime.datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-
-    with patch("homeassistant.util.dt.parse_datetime", side_effect=mock_parse_datetime):
-        yield base_dt
 
 
 def test_generate_level_pattern_empty_rates():
@@ -155,11 +140,11 @@ def test_generate_level_pattern_overlapping_rates():
 
     # Expected:
     # 0-2h: Pure Low = 10 L's
-    # 2-4h: Low+Medium average = 10 M's (as (1+2)/2 = 1.5 rounds to M)
-    # 4-6h: Low+Medium+High average = 10 H's (as (1+2+3)/3 = 2 rounds to M)
-    # 6-8h: Medium+High average = 10 H's (as (2+3)/2 = 2.5 rounds to H)
+    # 2-4h: Low+Medium average = (1+2)/2 = 1.5 → rounds to M = 10 M's
+    # 4-6h: Low+Medium+High average = (1+2+3)/3 = 2 → rounds to M = 10 M's
+    # 6-8h: Medium+High average = (2+3)/2 = 2.5 → rounds to H = 10 H's
     # 8-10h: Pure High = 10 H's
-    # 10-46h: Unknown = 180 U's
+    # 10-46h: Unknown = 26 hours = 130 U's
     expected_pattern = "L" * 10 + "M" * 10 + "M" * 10 + "H" * 10 + "H" * 10 + "U" * 130
 
     assert pattern == expected_pattern

@@ -31,7 +31,7 @@ from custom_components.electricitypricelevels.const import (
 
 # Default config for tests
 DEFAULT_CONFIG_OPTIONS = {
-    CONF_NORDPOOL_PRICES_SENSOR: "sensor.nord_pool_fi_current_price",
+    CONF_NORDPOOL_PRICES_SENSOR: "sensor.nordpool_prices",
     CONF_LOW_THRESHOLD: 0.10,  # EUR/kWh after all fees and VAT
     CONF_HIGH_THRESHOLD: 0.20, # EUR/kWh after all fees and VAT
     CONF_SUPPLIER_FIXED_FEE: 0.01, # EUR/kWh
@@ -245,12 +245,12 @@ async def test_async_update_data_48_hours_today_and_tomorrow(sensor_instance, mo
     assert sensor_instance.state == current_rate_details["cost"]
     assert sensor_instance.extra_state_attributes["spot_price"] == expected_spot_price_for_current_hour
 
-    # Check ranking was done per day
+    # Check ranking was done per day — 24 distinct prices should produce 24 unique ranks
     ranks_today = {r["rank"] for r in sensor_instance._rates if r["start"].date() == TODAY_DATE}
     ranks_tomorrow = {r["rank"] for r in sensor_instance._rates if r["start"].date() == TODAY_DATE + datetime.timedelta(days=1)}
 
-    assert len(ranks_today) > 1 or (len(sensor_instance._rates) > 0 and len(ranks_today)==1) # Ranks should vary unless all prices are same
-    assert len(ranks_tomorrow) > 1 or (len(sensor_instance._rates) > 24 and len(ranks_tomorrow)==1)
+    assert len(ranks_today) == 24, f"Expected 24 unique ranks for today, got {len(ranks_today)}"
+    assert len(ranks_tomorrow) == 24, f"Expected 24 unique ranks for tomorrow, got {len(ranks_tomorrow)}"
 
 
 @pytest.mark.asyncio
@@ -313,6 +313,39 @@ async def test_async_added_to_hass_no_initial_state(sensor_instance, mock_hass):
     # The listener should be set up
     sensor_instance.async_on_remove.assert_called_once()
     # But refresh should not be called as there's no initial state
+    sensor_instance._refresh_sensor_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_added_to_hass_with_initial_state_and_rates(sensor_instance, mock_hass):
+    """Test async_added_to_hass triggers refresh when source sensor has state and rates exist."""
+    mock_nordpool_state = MagicMock(spec=State)
+    mock_nordpool_state.state = "1.23"
+    mock_hass.states.get.return_value = mock_nordpool_state
+
+    # Pre-populate some rates so _refresh_sensor_state gets called
+    sensor_instance._rates = [{"start": "fake", "end": "fake", "cost": 0.1}]
+    sensor_instance._refresh_sensor_state = AsyncMock()
+
+    await sensor_instance.async_added_to_hass()
+
+    sensor_instance.async_on_remove.assert_called_once()
+    sensor_instance._refresh_sensor_state.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_added_to_hass_with_initial_state_but_no_rates(sensor_instance, mock_hass):
+    """Test async_added_to_hass does not refresh when source sensor has state but no rates yet."""
+    mock_nordpool_state = MagicMock(spec=State)
+    mock_nordpool_state.state = "1.23"
+    mock_hass.states.get.return_value = mock_nordpool_state
+
+    sensor_instance._rates = []
+    sensor_instance._refresh_sensor_state = AsyncMock()
+
+    await sensor_instance.async_added_to_hass()
+
+    sensor_instance.async_on_remove.assert_called_once()
     sensor_instance._refresh_sensor_state.assert_not_called()
 
 @pytest.mark.asyncio

@@ -25,7 +25,7 @@ def hass():
     hass.states.get = MagicMock(return_value=None)
     hass.config = MagicMock()
     hass.config.time_zone = "UTC"
-    hass.loop = asyncio.get_event_loop()
+    hass.loop = asyncio.new_event_loop()
     hass.data = {"custom_components": {}}
     hass.loop_thread_id = threading.get_ident()
     return hass
@@ -102,9 +102,9 @@ def test_fetch_service_value_normal(mock_calc, mock_dt, sensor, hass):
     assert isinstance(int(parts[1]), int)
     level_length = int(parts[1])
     assert level_length == 12
-    num_passed = 60 / level_length
+    num_passed = 60 // level_length
     assert len(parts[2]) == num_passed
-    num_future = 12 * 60 / level_length
+    num_future = 12 * 60 // level_length
     assert len(parts[3]) == num_future
     assert parts[2] == "BCDEF" # Previous 60 minutes is 5 levels, each 12 minutes long
     assert parts[3] == "GHIJKLMNOPQRSTABCDEFGHIJKLMNOPQRSTABCDEFGHIJKLMNOPQRSTABCDEF" # Next 12 hours, plus one extra
@@ -192,18 +192,16 @@ def test_fetch_service_value_now_and_next(mock_dt, mock_tz, mock_calc, sensor, h
 
 def test_calculate_levels_fill_unknown_false(hass):
     # Simulate a state with 2 rates, 30 min each, thresholds 1/2
-    class FakeState:
-        domain = "sensor"
-        def __init__(self):
-            self.attributes = {
-                "rates": [
-                    {"start": datetime(2023,1,1,0,0), "end": datetime(2023,1,1,0,30), "cost": 1},
-                    {"start": datetime(2023,1,1,0,30), "end": datetime(2023,1,1,1,0), "cost": 3},
-                ],
-                "low_threshold": 1.5,
-                "high_threshold": 2.5,
-            }
-    hass.states.async_all.return_value = [FakeState()]
+    mock_state = MagicMock()
+    mock_state.attributes = {
+        "rates": [
+            {"start": datetime(2023,1,1,0,0), "end": datetime(2023,1,1,0,30), "cost": 1},
+            {"start": datetime(2023,1,1,0,30), "end": datetime(2023,1,1,1,0), "cost": 3},
+        ],
+        "low_threshold": 1.5,
+        "high_threshold": 2.5,
+    }
+    hass.states.get.return_value = mock_state
     # Should not fill with 'U' if fill_unknown is False
     result = calculate_levels(hass, 30, fill_unknown=False)
     assert result["levels"] == "LH"
@@ -211,18 +209,16 @@ def test_calculate_levels_fill_unknown_false(hass):
 
 def test_calculate_levels_fill_unknown_true(hass):
     # Simulate a state with 2 rates, 30 min each, thresholds 1/2
-    class FakeState:
-        domain = "sensor"
-        def __init__(self):
-            self.attributes = {
-                "rates": [
-                    {"start": datetime(2023,1,1,0,0), "end": datetime(2023,1,1,0,30), "cost": 1},
-                    {"start": datetime(2023,1,1,0,30), "end": datetime(2023,1,1,1,0), "cost": 3},
-                ],
-                "low_threshold": 1.5,
-                "high_threshold": 2.5,
-            }
-    hass.states.async_all.return_value = [FakeState()]
+    mock_state = MagicMock()
+    mock_state.attributes = {
+        "rates": [
+            {"start": datetime(2023,1,1,0,0), "end": datetime(2023,1,1,0,30), "cost": 1},
+            {"start": datetime(2023,1,1,0,30), "end": datetime(2023,1,1,1,0), "cost": 3},
+        ],
+        "low_threshold": 1.5,
+        "high_threshold": 2.5,
+    }
+    hass.states.get.return_value = mock_state
     # Should fill with 'U' up to 96 chars (2 days, 30 min slots)
     result = calculate_levels(hass, 30, fill_unknown=True)
     assert result["levels"].startswith("LH")
