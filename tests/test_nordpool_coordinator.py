@@ -78,10 +78,15 @@ async def test_execute_nordpool_call_success(coordinator, mock_hass):
 
     mock_hass.services.async_call.return_value = mock_service_response
 
+    # Mock currency entity lookup
+    mock_currency_state = MagicMock()
+    mock_currency_state.state = "SEK"
+    mock_hass.states.get.return_value = mock_currency_state
+
     status, payload = await coordinator._execute_nordpool_call_logic(test_date)
 
     assert status == "SUCCESS_DATA"
-    assert payload["currency"] is None
+    assert payload["currency"] == "SEK"
     assert payload["raw"] == mock_service_response["SE3"]
 
     mock_hass.services.async_call.assert_called_once_with(
@@ -94,7 +99,7 @@ async def test_execute_nordpool_call_success(coordinator, mock_hass):
 
 @pytest.mark.asyncio
 async def test_execute_nordpool_call_no_currency(coordinator, mock_hass):
-    """Test Nordpool service call when coordinator has no currency configured."""
+    """Test Nordpool service call when currency entity is not available."""
     coordinator._currency = None
     test_date = datetime.date(2025, 8, 9)
     mock_service_response = {
@@ -104,6 +109,8 @@ async def test_execute_nordpool_call_no_currency(coordinator, mock_hass):
     }
 
     mock_hass.services.async_call.return_value = mock_service_response
+    # Currency entity not found
+    mock_hass.states.get.return_value = None
     status, payload = await coordinator._execute_nordpool_call_logic(test_date)
 
     assert status == "SUCCESS_DATA"

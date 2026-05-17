@@ -426,18 +426,20 @@ class ElectricityPriceLevelsSensor(SensorEntity):
         """
         _LOGGER.info(f"async_update_data CALLED with data. Keys: {list(nordpool_data.keys() if nordpool_data else [])}, Raw entries: {len(nordpool_data.get('raw', [])) if nordpool_data else 0}")
         try:
-            # Attempt to read units from the Nord Pool sensor at data update time
+            # Attempt to read units from the Nord Pool sensor attributes
             self._update_units_from_nordpool_sensor()
 
-            # Fallback defaults if Nord Pool sensor wasn't readable
+            # Use currency from coordinator data (read from currency entity)
+            new_currency = nordpool_data.get("currency")
+            if new_currency and self._currency != new_currency:
+                _LOGGER.info(f"Updated currency from coordinator data: {self._currency} -> {new_currency}")
+                self._currency = new_currency
+
+            # Fallback: hardcode unit to kWh (Nord Pool always provides per-kWh)
             if not self._unit:
                 self._unit = "kWh"
-            if not self._currency:
-                new_currency = nordpool_data.get("currency")
-                if new_currency:
-                    self._currency = new_currency
 
-            # Ensure unit_of_measurement is set for the property
+            # Build unit_of_measurement string
             if self._currency and self._unit:
                 self._unit_of_measurement = f"{self._currency}/{self._unit}"
             elif self._currency:
@@ -464,9 +466,11 @@ class ElectricityPriceLevelsSensor(SensorEntity):
                     raw_price = entry_data["price"]
 
                     if raw_price is not None:
-                        # Convert from source unit to kWh using detected energy unit
-                        kwh_divisor = {"MWh": 1000.0, "kWh": 1.0, "Wh": 0.001}.get(self._unit, 1.0)
-                        price_kwh = raw_price / kwh_divisor / self._price_divisor
+                        # Nord Pool's get_prices_for_date service always returns
+                        # prices in the native unit (currency/MWh). Convert to
+                        # currency/kWh regardless of what the HA sensor entity
+                        # reports (HA auto-converts the sensor display unit).
+                        price_kwh = raw_price / 1000.0 / self._price_divisor
 
                         _LOGGER.debug(f"Processing entry: start={start_local}, end={end_local}, raw_price={raw_price}, price_kwh={price_kwh}, unit={self._unit}, divisor={self._price_divisor}")
                         processed_for_ranking.append({

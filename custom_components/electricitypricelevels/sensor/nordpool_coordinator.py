@@ -59,14 +59,20 @@ class NordpoolDataCoordinator:
 
                     _LOGGER.info(f"Extracted area '{area_id}' and price data list from service response.")
 
-                    # Use the currency that was passed during initialization
+                    # Determine currency: use configured value, or look up
+                    # from the Nord Pool currency entity for this area
                     determined_currency = self._currency
-                    if determined_currency:
-                        _LOGGER.debug(f"Using currency '{determined_currency}' from configuration.")
-                    else:
-                        _LOGGER.debug(
-                            "No explicit currency provided, using default."
-                        )
+                    if not determined_currency:
+                        currency_entity_id = f"sensor.nord_pool_{area_id.lower()}_currency"
+                        currency_state_obj = self.hass.states.get(currency_entity_id)
+                        if currency_state_obj and currency_state_obj.state not in (None, STATE_UNKNOWN, STATE_UNAVAILABLE):
+                            determined_currency = currency_state_obj.state
+                            _LOGGER.info(f"Fetched currency '{determined_currency}' from entity '{currency_entity_id}'.")
+                        else:
+                            _LOGGER.warning(
+                                f"Currency entity '{currency_entity_id}' not found or has invalid state "
+                                f"({currency_state_obj.state if currency_state_obj else 'None'}). Currency will be None."
+                            )
 
                     final_payload = {
                         "currency": determined_currency,
